@@ -2,10 +2,10 @@ import { net } from 'electron'
 import { execFile } from 'child_process'
 import { readFile, readdir, mkdir, writeFile, rm } from 'fs/promises'
 import { join, resolve } from 'path'
-import { homedir } from 'os'
 import type { CatalogPlugin } from '../../shared/types'
 import { log as _log } from '../logger'
 import { getCliEnv } from '../cli-env'
+import { findCliBinary, getPrimaryAgentHome } from '../openclaw/runtime'
 
 // ─── Input Validation ───
 
@@ -46,6 +46,11 @@ const SOURCES = [
   { repo: 'anthropics/knowledge-work-plugins', category: 'Knowledge Work' },
   { repo: 'anthropics/financial-services-plugins', category: 'Financial Services' },
 ] as const
+
+const AWESOME_REPO = 'VoltAgent/awesome-openclaw-skills'
+const AWESOME_RAW_BASE = `https://raw.githubusercontent.com/${AWESOME_REPO}/main`
+const AWESOME_README_URL = `${AWESOME_RAW_BASE}/README.md`
+const AWESOME_LIST_LIMIT = 1400
 
 // ─── TTL Cache ───
 
@@ -186,6 +191,7 @@ export async function fetchCatalog(forceRefresh?: boolean): Promise<{ plugins: C
             category: source.category,
             tags: deriveSemanticTags(name, description, job.skillPath),
             isSkillMd: job.useSkillMd,
+            installMode: 'native',
           }
           return plugin
         })
@@ -200,6 +206,16 @@ export async function fetchCatalog(forceRefresh?: boolean): Promise<{ plugins: C
       }
     })
   )
+
+  // Community skills feed: awesome-openclaw-skills (GitHub list + ClawHub links)
+  try {
+    const awesomePlugins = await fetchAwesomeOpenclawSkills()
+    allPlugins.push(...awesomePlugins)
+  } catch (err) {
+    const msg = `Awesome source fetch error: ${String(err)}`
+    log(msg)
+    errors.push(msg)
+  }
 
   for (const r of results) {
     if (r.status === 'rejected') {
@@ -224,17 +240,15 @@ export async function fetchCatalog(forceRefresh?: boolean): Promise<{ plugins: C
 }
 
 // ─── listInstalled ───
-// Reads directly from ~/.claude filesystem for reliable detection:
-// - Plugins: ~/.claude/plugins/installed_plugins.json (keys are "name@marketplace")
-// - Skills: ~/.claude/skills/ (each subdirectory is an installed skill)
+// Reads directly from the OpenClaw home directory for installed plugins/skills.
 
 export async function listInstalled(): Promise<string[]> {
-  const claudeDir = join(homedir(), '.claude')
+  const cliHomeDir = getPrimaryAgentHome()
   const names: string[] = []
 
   // 1. Installed plugins from JSON registry
   try {
-    const raw = await readFile(join(claudeDir, 'plugins', 'installed_plugins.json'), 'utf-8')
+    const raw = await readFile(join(cliHomeDir, 'plugins', 'installed_plugins.json'), 'utf-8')
     const data = JSON.parse(raw) as { plugins?: Record<string, unknown> }
     if (data.plugins) {
       for (const key of Object.keys(data.plugins)) {
@@ -249,9 +263,9 @@ export async function listInstalled(): Promise<string[]> {
     log(`listInstalled: no installed_plugins.json or parse error: ${e}`)
   }
 
-  // 2. Installed skills from ~/.claude/skills/
+  // 2. Installed skills from <cli-home>/skills/
   try {
-    const entries = await readdir(join(claudeDir, 'skills'), { withFileTypes: true })
+    const entries = await readdir(join(cliHomeDir, 'skills'), { withFileTypes: true })
     for (const entry of entries) {
       if (entry.isDirectory()) {
         names.push(entry.name)
@@ -265,8 +279,8 @@ export async function listInstalled(): Promise<string[]> {
 }
 
 // ─── installPlugin ───
-// For SKILL.md skills: writes directly to ~/.claude/skills/<name>/
-// For CLI plugins: falls back to `claude plugin install`
+// For SKILL.md skills: writes directly to <cli-home>/skills/<name>/
+// For CLI plugins: falls back to `<cli> plugin install`
 
 export async function installPlugin(
   repo: string,
@@ -286,10 +300,13 @@ export async function installPlugin(
     if (sourcePath && !validateSourcePath(sourcePath)) {
       return { ok: false, error: `Invalid source path: ${sourcePath}` }
     }
+    if (repo === AWESOME_REPO || marketplace === 'Awesome OpenClaw Skills') {
+      return { ok: false, error: 'This skill is installed via ClawHub. Run: clawhub install <skill-slug>' }
+    }
 
     if (isSkillMd !== false) {
       // Direct SKILL.md install
-      const skillsBase = join(homedir(), '.claude', 'skills')
+      const skillsBase = join(getPrimaryAgentHome(), 'skills')
       const skillsDir = join(skillsBase, pluginName)
       assertSkillDirContained(skillsDir, skillsBase)
 
@@ -312,11 +329,12 @@ export async function installPlugin(
       log(`installPlugin: wrote ${skillsDir}/SKILL.md`)
     } else {
       // CLI plugin install (knowledge-work, financial-services bundles)
-      const addResult = await execAsync('claude', ['plugin', 'marketplace', 'add', repo], 15000)
+      const cliBin = findCliBinary()
+      const addResult = await execAsync(cliBin, ['plugin', 'marketplace', 'add', repo], 15000)
       if (addResult.exitCode !== 0 && !addResult.stdout.includes('already added') && !addResult.stderr.includes('already added')) {
         return { ok: false, error: addResult.stderr || 'Failed to add marketplace' }
       }
-      const installResult = await execAsync('claude', ['plugin', 'install', `${pluginName}@${marketplace}`], 15000)
+      const installResult = await execAsync(cliBin, ['plugin', 'install', `${pluginName}@${marketplace}`], 15000)
       if (installResult.exitCode !== 0) {
         return { ok: false, error: installResult.stderr || 'Failed to install plugin' }
       }
@@ -339,7 +357,7 @@ export async function uninstallPlugin(
     if (!validatePluginName(pluginName)) {
       return { ok: false, error: `Invalid plugin name: ${pluginName}` }
     }
-    const skillsBase = join(homedir(), '.claude', 'skills')
+    const skillsBase = join(getPrimaryAgentHome(), 'skills')
     const skillsDir = join(skillsBase, pluginName)
     assertSkillDirContained(skillsDir, skillsBase)
     await rm(skillsDir, { recursive: true, force: true })
@@ -371,6 +389,82 @@ function netFetch(url: string): Promise<{ ok: boolean; status: number; body: str
     request.on('error', (err) => reject(err))
     request.end()
   })
+}
+
+async function fetchAwesomeOpenclawSkills(): Promise<CatalogPlugin[]> {
+  const readmeRes = await netFetch(AWESOME_README_URL)
+  if (!readmeRes.ok) {
+    throw new Error(`Failed to fetch ${AWESOME_REPO} README (${readmeRes.status})`)
+  }
+
+  const categoryPaths = parseAwesomeCategoryPaths(readmeRes.body)
+  const categoryDocs = await Promise.allSettled(
+    categoryPaths.map(async (path) => {
+      const url = `${AWESOME_RAW_BASE}/${path}`
+      const res = await netFetch(url)
+      if (!res.ok) throw new Error(`Failed to fetch ${url} (${res.status})`)
+      return { path, body: res.body }
+    })
+  )
+
+  const plugins: CatalogPlugin[] = []
+  for (const doc of categoryDocs) {
+    if (doc.status !== 'fulfilled') {
+      log(`Awesome category fetch warning: ${doc.reason}`)
+      continue
+    }
+    const parsed = parseAwesomeCategory(doc.value.path, doc.value.body)
+    for (const p of parsed) {
+      plugins.push(p)
+      if (plugins.length >= AWESOME_LIST_LIMIT) return plugins
+    }
+  }
+  return plugins
+}
+
+function parseAwesomeCategoryPaths(readme: string): string[] {
+  const matches = [...readme.matchAll(/\(categories\/([a-z0-9-]+\.md)\)/gi)]
+  const dedup = new Set<string>()
+  for (const m of matches) dedup.add(`categories/${m[1]}`)
+  return [...dedup]
+}
+
+function parseAwesomeCategory(path: string, body: string): CatalogPlugin[] {
+  const lines = body.split('\n')
+  const heading = lines.find((l) => l.startsWith('# '))?.replace(/^#\s+/, '').trim() || 'Community'
+  const results: CatalogPlugin[] = []
+
+  for (const line of lines) {
+    const m = line.match(/^- \[([^\]]+)\]\((https:\/\/clawskills\.sh\/skills\/([^)\/\s]+))\)\s*-\s*(.+)$/i)
+    if (!m) continue
+    const name = m[1].trim()
+    const externalUrl = m[2].trim()
+    const slug = m[3].trim().toLowerCase()
+    const description = m[4].trim()
+    const author = slug.includes('-') ? slug.split('-')[0] : 'community'
+    const id = `${AWESOME_REPO}/${slug}`
+
+    const tags = Array.from(new Set(['Community', ...deriveSemanticTags(name, description, `${path}#${slug}`)]))
+    results.push({
+      id,
+      name,
+      description,
+      version: 'community',
+      author,
+      marketplace: 'Awesome OpenClaw Skills',
+      repo: AWESOME_REPO,
+      sourcePath: `${path}#${slug}`,
+      installName: slug,
+      category: heading,
+      tags,
+      isSkillMd: false,
+      installMode: 'clawhub',
+      installCommand: `clawhub install ${slug}`,
+      externalUrl,
+    })
+  }
+
+  return results
 }
 
 /** Parse YAML-like frontmatter from SKILL.md (name: ..., description: "...") */

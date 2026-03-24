@@ -3,13 +3,11 @@ import type { TabStatus, NormalizedEvent, EnrichedError, Message, TabState, Atta
 import { useThemeStore } from '../theme'
 import notificationSrc from '../../../resources/notification.mp3'
 
-// ─── Known models ───
-
-export const AVAILABLE_MODELS = [
-  { id: 'claude-opus-4-6', label: 'Opus 4.6' },
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
-] as const
+export interface OpenclawModelOption {
+  id: string
+  label: string
+  provider: string
+}
 
 function normalizeModelId(modelId: string): string {
   // Claude sometimes appends context window hints like "[1m]" to model IDs.
@@ -18,25 +16,10 @@ function normalizeModelId(modelId: string): string {
 
 export function getModelDisplayLabel(modelId: string): string {
   const normalizedId = normalizeModelId(modelId)
-  const has1MContext = /\[\s*1m\s*\]/i.test(modelId)
-
-  const known = AVAILABLE_MODELS.find((m) => m.id === normalizedId)
-  if (known) {
-    return has1MContext ? `${known.label} (1M)` : known.label
-  }
-
-  // Fallback for future model IDs not yet listed in AVAILABLE_MODELS.
-  const compact = normalizedId
-    .replace(/^claude-/, '')
-    .replace(/-\d{8}$/, '')
-  const familyMatch = compact.match(/^(opus|sonnet|haiku)-(\d+)-(\d+)$/i)
-  if (familyMatch) {
-    const family = familyMatch[1][0].toUpperCase() + familyMatch[1].slice(1).toLowerCase()
-    const label = `${family} ${familyMatch[2]}.${familyMatch[3]}`
-    return has1MContext ? `${label} (1M)` : label
-  }
-
-  return has1MContext ? `${normalizedId} (1M)` : normalizedId
+  const withPrefix = normalizedId.includes('/') ? normalizedId : normalizedId
+  const parts = withPrefix.split('/')
+  if (parts.length >= 2) return parts.slice(1).join('/')
+  return normalizedId
 }
 
 // ─── Store ───
@@ -47,6 +30,10 @@ interface StaticInfo {
   subscriptionType: string | null
   projectPath: string
   homePath: string
+  cliBinary: string
+  cliCommand: string
+  authSupported: boolean
+  mcpSupported: boolean
 }
 
 interface State {
@@ -58,11 +45,18 @@ interface State {
   staticInfo: StaticInfo | null
   /** User's preferred model override (null = use default) */
   preferredModel: string | null
+  openclawModels: OpenclawModelOption[]
+  activeProvider: string | null
+  currentOpenclawModel: string | null
+  openclawUpdateInfo: string | null
+  openclawUpdateBusy: boolean
   /** Global permission mode: 'ask' shows cards, 'auto' auto-approves all tool calls */
   permissionMode: 'ask' | 'auto'
 
   // Marketplace state
   marketplaceOpen: boolean
+  controlCenterOpen: boolean
+  controlCenterTab: 'agents' | 'settings'
   marketplaceCatalog: CatalogPlugin[]
   marketplaceLoading: boolean
   marketplaceError: string | null
@@ -74,6 +68,10 @@ interface State {
   // Actions
   initStaticInfo: () => Promise<void>
   setPreferredModel: (model: string | null) => void
+  refreshOpenclawModels: () => Promise<void>
+  setOpenclawModel: (provider: string, model: string) => Promise<void>
+  checkOpenclawUpdate: () => Promise<void>
+  runOpenclawUpgrade: () => Promise<void>
   setPermissionMode: (mode: 'ask' | 'auto') => void
   createTab: () => Promise<string>
   selectTab: (tabId: string) => void
@@ -81,6 +79,9 @@ interface State {
   clearTab: () => void
   toggleExpanded: () => void
   toggleMarketplace: () => void
+  openControlCenter: (tab?: 'agents' | 'settings') => void
+  closeControlCenter: () => void
+  setControlCenterTab: (tab: 'agents' | 'settings') => void
   closeMarketplace: () => void
   loadMarketplace: (forceRefresh?: boolean) => Promise<void>
   setMarketplaceSearch: (query: string) => void
@@ -155,10 +156,17 @@ export const useSessionStore = create<State>((set, get) => ({
   isExpanded: false,
   staticInfo: null,
   preferredModel: null,
+  openclawModels: [],
+  activeProvider: null,
+  currentOpenclawModel: null,
+  openclawUpdateInfo: null,
+  openclawUpdateBusy: false,
   permissionMode: 'ask',
 
   // Marketplace
   marketplaceOpen: false,
+  controlCenterOpen: false,
+  controlCenterTab: 'agents',
   marketplaceCatalog: [],
   marketplaceLoading: false,
   marketplaceError: null,
@@ -177,13 +185,88 @@ export const useSessionStore = create<State>((set, get) => ({
           subscriptionType: result.auth?.subscriptionType || null,
           projectPath: result.projectPath || '~',
           homePath: result.homePath || '~',
+          cliBinary: result.cliBinary || 'openclaw',
+          cliCommand: result.cliCommand || 'openclaw',
+          authSupported: result.authSupported !== false,
+          mcpSupported: result.mcpSupported !== false,
         },
       })
+      get().refreshOpenclawModels()
+      void get().checkOpenclawUpdate()
     } catch {}
   },
 
   setPreferredModel: (model) => {
     set({ preferredModel: model })
+  },
+
+  refreshOpenclawModels: async () => {
+    try {
+      const info = await window.clui.openclawModelInfo()
+      if (!info.ok) return
+      const options: OpenclawModelOption[] = []
+      const activeProvider = info.provider || null
+      const providerNode = info.providers.find((p) => p.id === activeProvider) || info.providers[0]
+      if (providerNode) {
+        for (const m of providerNode.models) {
+          options.push({ id: m.id, label: m.name || m.id, provider: providerNode.id })
+        }
+      }
+      set({
+        openclawModels: options,
+        activeProvider: providerNode?.id || activeProvider,
+        currentOpenclawModel: info.model || null,
+        preferredModel: info.model || null,
+      })
+    } catch {}
+  },
+
+  setOpenclawModel: async (provider, model) => {
+    try {
+      const res = await window.clui.openclawSetModel(provider, model)
+      if (!res.ok) return
+      set({
+        currentOpenclawModel: model,
+        preferredModel: model,
+        activeProvider: provider,
+      })
+    } catch {}
+  },
+
+  checkOpenclawUpdate: async () => {
+    set({ openclawUpdateBusy: true })
+    try {
+      const res = await window.clui.openclawRun('update_check')
+      set({
+        openclawUpdateInfo: res.ok
+          ? (res.output || 'OpenClaw update check completed.')
+          : (res.error || res.output || 'OpenClaw update check failed.'),
+        openclawUpdateBusy: false,
+      })
+    } catch {
+      set({
+        openclawUpdateInfo: 'OpenClaw update check failed.',
+        openclawUpdateBusy: false,
+      })
+    }
+  },
+
+  runOpenclawUpgrade: async () => {
+    set({ openclawUpdateBusy: true })
+    try {
+      const res = await window.clui.openclawRun('update_upgrade')
+      set({
+        openclawUpdateInfo: res.ok
+          ? (res.output || 'OpenClaw upgrade completed.')
+          : (res.error || res.output || 'OpenClaw upgrade failed.'),
+        openclawUpdateBusy: false,
+      })
+    } catch {
+      set({
+        openclawUpdateInfo: 'OpenClaw upgrade failed.',
+        openclawUpdateBusy: false,
+      })
+    }
   },
 
   setPermissionMode: (mode) => {
@@ -259,9 +342,21 @@ export const useSessionStore = create<State>((set, get) => ({
     if (s.marketplaceOpen) {
       set({ marketplaceOpen: false })
     } else {
-      set({ isExpanded: false, marketplaceOpen: true })
+      set({ isExpanded: false, marketplaceOpen: true, controlCenterOpen: false })
       get().loadMarketplace()
     }
+  },
+
+  openControlCenter: (tab = 'agents') => {
+    set({ isExpanded: false, marketplaceOpen: false, controlCenterOpen: true, controlCenterTab: tab })
+  },
+
+  closeControlCenter: () => {
+    set({ controlCenterOpen: false })
+  },
+
+  setControlCenterTab: (tab) => {
+    set({ controlCenterTab: tab })
   },
 
   closeMarketplace: () => {
@@ -271,6 +366,7 @@ export const useSessionStore = create<State>((set, get) => ({
   loadMarketplace: async (forceRefresh) => {
     set({ marketplaceLoading: true, marketplaceError: null })
     try {
+      const existingClawhub = get().marketplaceInstalledNames.filter((n) => n.startsWith('clawhub:'))
       const [catalog, installed] = await Promise.all([
         window.clui.fetchMarketplace(forceRefresh),
         window.clui.listInstalledPlugins(),
@@ -279,9 +375,13 @@ export const useSessionStore = create<State>((set, get) => ({
         set({ marketplaceError: catalog.error, marketplaceLoading: false })
         return
       }
-      const installedSet = new Set(installed.map((n) => n.toLowerCase()))
+      const installedSet = new Set([...installed, ...existingClawhub].map((n) => n.toLowerCase()))
       const pluginStates: Record<string, PluginStatus> = {}
       for (const p of catalog.plugins) {
+        if (p.installMode === 'clawhub') {
+          pluginStates[p.id] = installedSet.has(`clawhub:${p.installName}`.toLowerCase()) ? 'installed' : 'not_installed'
+          continue
+        }
         // For SKILL.md skills: match individual name against ~/.claude/skills/ dirs
         // For CLI plugins: match installName or "installName@marketplace" against installed_plugins.json
         const candidates = p.isSkillMd
@@ -292,7 +392,7 @@ export const useSessionStore = create<State>((set, get) => ({
       }
       set({
         marketplaceCatalog: catalog.plugins,
-        marketplaceInstalledNames: installed,
+        marketplaceInstalledNames: Array.from(new Set([...installed, ...existingClawhub])),
         marketplacePluginStates: pluginStates,
         marketplaceLoading: false,
       })
@@ -313,6 +413,23 @@ export const useSessionStore = create<State>((set, get) => ({
   },
 
   installMarketplacePlugin: async (plugin) => {
+    if (plugin.installMode === 'clawhub') {
+      set((s) => ({
+        marketplacePluginStates: { ...s.marketplacePluginStates, [plugin.id]: 'installing' },
+      }))
+      const result = await window.clui.openclawRun(`clawhub_install:${plugin.installName}`)
+      if (result.ok) {
+        set((s) => ({
+          marketplacePluginStates: { ...s.marketplacePluginStates, [plugin.id]: 'installed' as PluginStatus },
+          marketplaceInstalledNames: Array.from(new Set([...s.marketplaceInstalledNames, `clawhub:${plugin.installName}`])),
+        }))
+      } else {
+        set((s) => ({
+          marketplacePluginStates: { ...s.marketplacePluginStates, [plugin.id]: 'failed' as PluginStatus },
+        }))
+      }
+      return
+    }
     set((s) => ({
       marketplacePluginStates: { ...s.marketplacePluginStates, [plugin.id]: 'installing' },
     }))
@@ -343,7 +460,7 @@ export const useSessionStore = create<State>((set, get) => ({
     set({ marketplaceOpen: false, isExpanded: true })
     // Small delay to let the UI transition
     setTimeout(() => {
-      get().sendMessage('Help me create a new Claude Code skill')
+      get().sendMessage('Help me create a new OpenClaw skill')
     }, 100)
   },
 
@@ -610,12 +727,15 @@ export const useSessionStore = create<State>((set, get) => ({
     }))
 
     // Send to backend — ControlPlane will queue if a run is active
-    const { preferredModel } = get()
+    const { preferredModel, activeProvider } = get()
+    const resolvedModel = preferredModel
+      ? (preferredModel.includes('/') ? preferredModel : (activeProvider ? `${activeProvider}/${preferredModel}` : preferredModel))
+      : undefined
     window.clui.prompt(activeTabId, requestId, {
       prompt: fullPrompt,
       projectPath: resolvedPath,
       sessionId: tab.claudeSessionId || undefined,
-      model: preferredModel || undefined,
+      model: resolvedModel,
       addDirs: tab.additionalDirs.length > 0 ? tab.additionalDirs : undefined,
     }).catch((err: Error) => {
       get().handleError(activeTabId, {

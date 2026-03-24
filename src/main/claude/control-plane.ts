@@ -614,9 +614,8 @@ export class ControlPlane extends EventEmitter {
     this._setTabStatus(tabId, newStatus)
 
     // ─── Pick transport ───
-    // Stream-json is the stable transport for all regular messages.
-    // PTY is reserved for future interactive permission handling only.
-    const usePty = false
+    // OpenClaw compatibility requires PTY transport (legacy -p path is not supported).
+    const usePty = this.interactivePty
 
     let pid: number | null = null
     try {

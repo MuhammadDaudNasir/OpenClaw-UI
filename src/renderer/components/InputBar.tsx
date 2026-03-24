@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Microphone, ArrowUp, SpinnerGap, X, Check } from '@phosphor-icons/react'
-import { useSessionStore, AVAILABLE_MODELS } from '../stores/sessionStore'
+import { useSessionStore } from '../stores/sessionStore'
 import { AttachmentChips } from './AttachmentChips'
 import { SlashCommandMenu, getFilteredCommandsWithExtras, type SlashCommand } from './SlashCommandMenu'
 import { useColors } from '../theme'
@@ -38,6 +38,9 @@ export function InputBar() {
   const removeAttachment = useSessionStore((s) => s.removeAttachment)
 
   const setPreferredModel = useSessionStore((s) => s.setPreferredModel)
+  const setOpenclawModel = useSessionStore((s) => s.setOpenclawModel)
+  const openclawModels = useSessionStore((s) => s.openclawModels)
+  const activeProvider = useSessionStore((s) => s.activeProvider)
   const staticInfo = useSessionStore((s) => s.staticInfo)
   const preferredModel = useSessionStore((s) => s.preferredModel)
   const activeTabId = useSessionStore((s) => s.activeTabId)
@@ -181,12 +184,13 @@ export function InputBar() {
         const model = tab?.sessionModel || null
         const version = tab?.sessionVersion || staticInfo?.version || null
         const current = preferredModel || model || 'default'
-        const lines = AVAILABLE_MODELS.map((m) => {
+        const lines = openclawModels.map((m) => {
           const active = m.id === current || (!preferredModel && m.id === model)
           return `  ${active ? '\u25CF' : '\u25CB'} ${m.label} (${m.id})`
         })
-        const header = version ? `Claude Code ${version}` : 'Claude Code'
-        addSystemMessage(`${header}\n\n${lines.join('\n')}\n\nSwitch model: type /model <name>\n  e.g. /model sonnet`)
+        const header = version ? `OpenClaw CLI ${version}` : 'OpenClaw CLI'
+        const providerLine = activeProvider ? `Provider: ${activeProvider}` : 'Provider: unknown'
+        addSystemMessage(`${header}\n${providerLine}\n\n${lines.join('\n')}\n\nSwitch model: type /model <name>\n  e.g. /model qwen`)
         break
       }
       case '/mcp': {
@@ -227,7 +231,7 @@ export function InputBar() {
         break
       }
     }
-  }, [tab, clearTab, addSystemMessage, staticInfo, preferredModel])
+  }, [tab, clearTab, addSystemMessage, staticInfo, preferredModel, openclawModels, activeProvider])
 
   const handleSlashSelect = useCallback((cmd: SlashCommand) => {
     const isSkillCommand = !!tab?.sessionSkills?.includes(cmd.command.replace(/^\//, ''))
@@ -255,18 +259,21 @@ export function InputBar() {
     const modelMatch = prompt.match(/^\/model\s+(\S+)/i)
     if (modelMatch) {
       const query = modelMatch[1].toLowerCase()
-      const match = AVAILABLE_MODELS.find((m: { id: string; label: string }) =>
+      const match = openclawModels.find((m) =>
         m.id.toLowerCase().includes(query) || m.label.toLowerCase().includes(query)
       )
       if (match) {
         setPreferredModel(match.id)
+        if (activeProvider) {
+          void setOpenclawModel(activeProvider, match.id)
+        }
         setInput('')
         setSlashFilter(null)
         addSystemMessage(`Model switched to ${match.label} (${match.id})`)
       } else {
         setInput('')
         setSlashFilter(null)
-        addSystemMessage(`Unknown model "${modelMatch[1]}". Available: opus, sonnet, haiku`)
+        addSystemMessage(`Unknown model "${modelMatch[1]}".`)
       }
       return
     }
@@ -280,7 +287,7 @@ export function InputBar() {
     sendMessage(prompt || 'See attached files')
     // Refocus after React re-renders from the state update
     requestAnimationFrame(() => textareaRef.current?.focus())
-  }, [input, isBusy, sendMessage, attachments.length, showSlashMenu, slashFilter, slashIndex, handleSlashSelect])
+  }, [input, isBusy, sendMessage, attachments.length, showSlashMenu, slashFilter, slashIndex, handleSlashSelect, openclawModels, activeProvider, setOpenclawModel, setPreferredModel, addSystemMessage, isConnecting])
 
   // ─── Keyboard ───
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -416,7 +423,7 @@ export function InputBar() {
                       ? 'Transcribing...'
                       : isBusy
                         ? 'Type to queue a message...'
-                        : 'Ask Claude Code anything...'
+                        : 'Ask OpenClaw anything...'
               }
               rows={1}
               className="w-full bg-transparent resize-none"
@@ -474,7 +481,7 @@ export function InputBar() {
                       ? 'Transcribing...'
                       : isBusy
                         ? 'Type to queue a message...'
-                        : 'Ask Claude Code anything...'
+                        : 'Ask OpenClaw anything...'
               }
               rows={1}
               className="flex-1 bg-transparent resize-none"

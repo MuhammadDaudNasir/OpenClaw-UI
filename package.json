@@ -1,7 +1,7 @@
 {
-  "name": "clui",
+  "name": "openclaw-ui",
   "version": "0.1.0",
-  "description": "Clui CC — Command Line User Interface for Claude Code",
+  "description": "OpenClaw UI — Desktop Interface for OpenClaw CLI",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -13,11 +13,14 @@
   "homepage": "https://github.com/lcoutodemos/clui-cc#readme",
   "main": "dist/main/index.js",
   "scripts": {
+    "bootstrap": "bash ./commands/bootstrap.command",
+    "deploy": "bash ./commands/deploy.command",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "dist": "electron-vite build --mode production && electron-builder --mac --dir",
     "doctor": "bash scripts/doctor.sh",
+    "setup:git": "bash ./commands/setup-git.command",
     "postinstall": "electron-builder install-app-deps && bash scripts/patch-dev-icon.sh"
   },
   "dependencies": {
@@ -29,8 +32,8 @@
     "zustand": "^5.0.0"
   },
   "build": {
-    "appId": "com.clui.app",
-    "productName": "Clui CC",
+    "appId": "com.openclaw.ui",
+    "productName": "OpenClaw UI",
     "directories": {
       "output": "release"
     },
@@ -46,7 +49,7 @@
       "entitlements": "resources/entitlements.mac.plist",
       "entitlementsInherit": "resources/entitlements.mac.plist",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Clui CC uses your microphone to transcribe voice input locally with Whisper."
+        "NSMicrophoneUsageDescription": "OpenClaw UI uses your microphone to transcribe voice input locally with Whisper."
       }
     }
   },

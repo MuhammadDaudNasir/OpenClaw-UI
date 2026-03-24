@@ -76,20 +76,38 @@ export function TabStrip() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ duration: 0.15 }}
+                  whileHover={{ y: -1 }}
+                  whileTap={{ scale: 0.985 }}
                   onClick={() => selectTab(tab.id)}
                   className="group flex items-center gap-1.5 cursor-pointer select-none flex-shrink-0 max-w-[160px] transition-all duration-150"
                   style={{
-                    background: isActive ? colors.tabActive : 'transparent',
-                    border: isActive ? `1px solid ${colors.tabActiveBorder}` : '1px solid transparent',
+                    background: 'transparent',
+                    border: '1px solid transparent',
                     borderRadius: 9999,
                     padding: '4px 10px',
                     fontSize: 12,
                     color: isActive ? colors.textPrimary : colors.textTertiary,
                     fontWeight: isActive ? 500 : 400,
+                    position: 'relative',
+                    overflow: 'hidden',
                   }}
                 >
+                  {isActive && (
+                    <motion.span
+                      layoutId="active-tab-pill"
+                      transition={{ type: 'spring', stiffness: 520, damping: 34, mass: 0.7 }}
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: 9999,
+                        background: colors.tabActive,
+                        border: `1px solid ${colors.tabActiveBorder}`,
+                        zIndex: 0,
+                      }}
+                    />
+                  )}
                   <StatusDot status={tab.status} hasUnread={tab.hasUnread} hasPermission={tab.permissionQueue.length > 0} />
-                  <span className="truncate flex-1">{tab.title}</span>
+                  <span className="truncate flex-1" style={{ position: 'relative', zIndex: 1 }}>{tab.title}</span>
                   {tabs.length > 1 && (
                     <button
                       onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}
@@ -97,6 +115,8 @@ export function TabStrip() {
                       style={{
                         opacity: isActive ? 0.5 : 0,
                         color: colors.textSecondary,
+                        position: 'relative',
+                        zIndex: 1,
                       }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = isActive ? '0.5' : '0' }}

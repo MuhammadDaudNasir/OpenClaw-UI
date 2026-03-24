@@ -102,16 +102,16 @@ EOF
 
 Then retry `npm install`.
 
-## App Launches but No Claude Response
+## App Launches but No OpenClaw Response
 
-Verify Claude CLI is installed and authenticated:
+Verify OpenClaw CLI is installed and authenticated (Claude CLI also works in compatibility mode):
 
 ```bash
-claude --version
+openclaw --version
 ```
 
 ```bash
-claude
+openclaw
 ```
 
 ## `⌥ + Space` Does Not Toggle
@@ -132,7 +132,7 @@ To allow it:
 
 1. Open **System Settings → Privacy & Security**
 2. Scroll to the security section
-3. Click **Open Anyway** next to the Clui CC message
+3. Click **Open Anyway** next to the OpenClaw UI message
 
 You only need to do this once. This is a local build, not App Store distribution.
 

@@ -56,6 +56,8 @@ const SAFE_BASH_COMMANDS = new Set([
   'node', 'python', 'python3', 'ruby', 'java', 'javac',
   // Claude CLI (read-only subcommands)
   'claude',
+  // OpenClaw CLI (read-only subcommands)
+  'openclaw',
   // Disk / system info
   'df', 'du', 'free', 'top', 'htop', 'ps', 'uptime', 'lsof',
   'tree', 'realpath', 'dirname', 'basename',
@@ -76,6 +78,9 @@ const GIT_MUTATING_SUBCOMMANDS = new Set([
 
 // Claude subcommands that mutate state
 const CLAUDE_MUTATING_SUBCOMMANDS = new Set([
+  'config', 'login', 'logout',
+])
+const OPENCLAW_MUTATING_SUBCOMMANDS = new Set([
   'config', 'login', 'logout',
 ])
 
@@ -109,13 +114,14 @@ function isSafeBashCommand(command: unknown): boolean {
       if (sub && GIT_MUTATING_SUBCOMMANDS.has(sub)) return false
     }
 
-    // Extra check for claude: only allow read-only subcommands
-    if (base === 'claude') {
+    // Extra check for Claude/OpenClaw: only allow read-only subcommands
+    if (base === 'claude' || base === 'openclaw') {
       const subIdx = cmd.includes('=') ? 2 : 1
       const sub = parts[subIdx]
-      // claude mcp remove, claude config set, etc.
-      if (sub && CLAUDE_MUTATING_SUBCOMMANDS.has(sub)) return false
-      // claude mcp remove specifically
+      const mutating = base === 'openclaw' ? OPENCLAW_MUTATING_SUBCOMMANDS : CLAUDE_MUTATING_SUBCOMMANDS
+      // <cli> mcp remove, <cli> config set, etc.
+      if (sub && mutating.has(sub)) return false
+      // <cli> mcp remove specifically
       if (sub === 'mcp') {
         const mcpSub = parts[subIdx + 1]
         if (mcpSub && mcpSub !== 'list' && mcpSub !== 'get' && mcpSub !== '--help') return false

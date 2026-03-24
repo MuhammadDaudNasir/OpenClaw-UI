@@ -1,9 +1,10 @@
 import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, Tray, Menu, nativeImage, nativeTheme, shell, systemPreferences } from 'electron'
-import { join } from 'path'
-import { existsSync, readdirSync, statSync, createReadStream } from 'fs'
+import { join, basename } from 'path'
+import { existsSync, readdirSync, statSync, createReadStream, readFileSync, writeFileSync } from 'fs'
 import { createInterface } from 'readline'
 import { homedir } from 'os'
 import { ControlPlane } from './claude/control-plane'
+import { findCliBinary, getAgentDataHomes } from './openclaw/runtime'
 import { ensureSkills, type SkillStatus } from './skills/installer'
 import { fetchCatalog, listInstalled, installPlugin, uninstallPlugin } from './marketplace/catalog'
 import { log as _log, LOG_FILE, flushLogs } from './logger'
@@ -23,10 +24,41 @@ let tray: Tray | null = null
 let screenshotCounter = 0
 let toggleSequence = 0
 
-// Feature flag: enable PTY interactive permissions transport
-const INTERACTIVE_PTY = process.env.CLUI_INTERACTIVE_PERMISSIONS_PTY === '1'
+// Feature flag: PTY transport is now default for OpenClaw compatibility.
+// Set CLUI_INTERACTIVE_PERMISSIONS_PTY=0 to force legacy non-PTY transport.
+const INTERACTIVE_PTY = process.env.CLUI_INTERACTIVE_PERMISSIONS_PTY !== '0'
 
 const controlPlane = new ControlPlane(INTERACTIVE_PTY)
+
+type OpenclawConfig = {
+  models?: {
+    providers?: Record<string, { models?: Array<{ id?: string; name?: string }> }>
+  }
+  agents?: {
+    defaults?: {
+      model?: {
+        primary?: string
+        fallbacks?: string[]
+      }
+    }
+  }
+}
+
+function openclawConfigPath(): string {
+  return join(homedir(), '.openclaw', 'openclaw.json')
+}
+
+function readOpenclawConfig(): OpenclawConfig {
+  const path = openclawConfigPath()
+  const raw = readFileSync(path, 'utf-8')
+  return JSON.parse(raw)
+}
+
+function writeOpenclawConfig(config: OpenclawConfig): void {
+  const path = openclawConfigPath()
+  const content = JSON.stringify(config, null, 2) + '\n'
+  writeFileSync(path, content, 'utf-8')
+}
 
 // Keep native width fixed to avoid renderer animation vs setBounds race.
 // The UI itself still launches in compact mode; extra width is transparent/click-through.
@@ -150,6 +182,13 @@ function createWindow(): void {
     }
   })
 
+  // Auto-hide when focus is lost (clicking another app/window).
+  mainWindow.on('blur', () => {
+    if (!forceQuit && mainWindow && mainWindow.isVisible()) {
+      mainWindow.hide()
+    }
+  })
+
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
@@ -243,26 +282,65 @@ ipcMain.on(IPC.SET_IGNORE_MOUSE_EVENTS, (event, ignore: boolean, options?: { for
 
 ipcMain.handle(IPC.START, async () => {
   log('IPC START — fetching static CLI info')
-  const { execSync } = require('child_process')
+  const { execFileSync } = require('child_process')
+  const cliBin = findCliBinary()
+  const cliCommand = basename(cliBin)
+
+  const runCli = (args: string[]) => {
+    try {
+      const stdout = execFileSync(cliBin, args, {
+        encoding: 'utf-8',
+        timeout: 5000,
+        env: getCliEnv(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim()
+      return { ok: true as const, stdout, stderr: '' }
+    } catch (err: any) {
+      return {
+        ok: false as const,
+        stdout: String(err?.stdout || '').trim(),
+        stderr: String(err?.stderr || '').trim(),
+      }
+    }
+  }
 
   let version = 'unknown'
-  try {
-    version = execSync('claude -v', { encoding: 'utf-8', timeout: 5000, env: getCliEnv() }).trim()
-  } catch {}
+  const shortVersion = runCli(['-v'])
+  if (shortVersion.ok && shortVersion.stdout) {
+    version = shortVersion.stdout
+  } else {
+    const longVersion = runCli(['--version'])
+    if (longVersion.ok && longVersion.stdout) version = longVersion.stdout
+  }
 
   let auth: { email?: string; subscriptionType?: string; authMethod?: string } = {}
-  try {
-    const raw = execSync('claude auth status', { encoding: 'utf-8', timeout: 5000, env: getCliEnv() }).trim()
-    auth = JSON.parse(raw)
-  } catch {}
+  let authSupported = true
+  const authProbe = runCli(['auth', 'status'])
+  if (authProbe.ok) {
+    try { auth = JSON.parse(authProbe.stdout) } catch {}
+  } else {
+    const unknownCmd = /unknown command|did you mean/i.test(authProbe.stderr) || /unknown command|did you mean/i.test(authProbe.stdout)
+    if (unknownCmd) authSupported = false
+  }
 
   let mcpServers: string[] = []
-  try {
-    const raw = execSync('claude mcp list', { encoding: 'utf-8', timeout: 5000, env: getCliEnv() }).trim()
-    if (raw) mcpServers = raw.split('\n').filter(Boolean)
-  } catch {}
+  const mcpProbe = runCli(['mcp', 'list'])
+  if (mcpProbe.ok && mcpProbe.stdout) {
+    mcpServers = mcpProbe.stdout.split('\n').filter(Boolean)
+  }
+  const mcpSupported = mcpProbe.ok || !/unknown command|did you mean/i.test(mcpProbe.stderr + mcpProbe.stdout)
 
-  return { version, auth, mcpServers, projectPath: process.cwd(), homePath: require('os').homedir() }
+  return {
+    version,
+    auth,
+    mcpServers,
+    projectPath: process.cwd(),
+    homePath: require('os').homedir(),
+    cliBinary: cliBin,
+    cliCommand,
+    authSupported,
+    mcpSupported,
+  }
 })
 
 ipcMain.handle(IPC.CREATE_TAB, () => {
@@ -355,12 +433,13 @@ ipcMain.handle(IPC.LIST_SESSIONS, async (_e, projectPath?: string) => {
       log(`LIST_SESSIONS: rejected invalid projectPath: ${cwd}`)
       return []
     }
-    // Claude stores project sessions at ~/.claude/projects/<encoded-path>/
-    // Path encoding: replace all '/' with '-' (leading '/' becomes leading '-')
+    // Session files live under ~/.openclaw/projects/<encoded-path>/ with legacy
+    // fallback to ~/.claude/projects for migration compatibility.
     const encodedPath = cwd.replace(/\//g, '-')
-    const sessionsDir = join(homedir(), '.claude', 'projects', encodedPath)
-    if (!existsSync(sessionsDir)) {
-      log(`LIST_SESSIONS: directory not found: ${sessionsDir}`)
+    const sessionRoots = getAgentDataHomes().map((home) => join(home, 'projects', encodedPath))
+    const sessionsDir = sessionRoots.find((dir) => existsSync(dir))
+    if (!sessionsDir) {
+      log(`LIST_SESSIONS: directory not found for encoded path ${encodedPath}`)
       return []
     }
     const files = readdirSync(sessionsDir).filter((f: string) => f.endsWith('.jsonl'))
@@ -371,7 +450,7 @@ ipcMain.handle(IPC.LIST_SESSIONS, async (_e, projectPath?: string) => {
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
     for (const file of files) {
-      // The filename (without .jsonl) IS the canonical resume ID for `claude --resume`
+      // The filename (without .jsonl) is the canonical resume ID for `<cli> --resume`
       const fileSessionId = file.replace(/\.jsonl$/, '')
       if (!UUID_RE.test(fileSessionId)) continue // skip non-UUID files
 
@@ -389,7 +468,7 @@ ipcMain.handle(IPC.LIST_SESSIONS, async (_e, projectPath?: string) => {
         rl.on('line', (line: string) => {
           try {
             const obj = JSON.parse(line)
-            // Validate: must have expected Claude transcript fields
+            // Validate: must have expected transcript fields
             if (!meta.validated && obj.type && obj.uuid && obj.timestamp) {
               meta.validated = true
             }
@@ -451,8 +530,9 @@ ipcMain.handle(IPC.LOAD_SESSION, async (_e, arg: { sessionId: string; projectPat
       return []
     }
     const encodedPath = cwd.replace(/\//g, '-')
-    const filePath = join(homedir(), '.claude', 'projects', encodedPath, `${sessionId}.jsonl`)
-    if (!existsSync(filePath)) return []
+    const sessionRoots = getAgentDataHomes().map((home) => join(home, 'projects', encodedPath, `${sessionId}.jsonl`))
+    const filePath = sessionRoots.find((fp) => existsSync(fp))
+    if (!filePath) return []
 
     const messages: Array<{ role: string; content: string; toolName?: string; timestamp: number }> = []
     await new Promise<void>((resolve) => {
@@ -523,6 +603,18 @@ ipcMain.handle(IPC.OPEN_EXTERNAL, async (_event, url: string) => {
     if (!parsed.hostname) return false
     await shell.openExternal(parsed.href)
     return true
+  } catch {
+    return false
+  }
+})
+
+ipcMain.handle(IPC.OPEN_PATH, async (_event, path: string) => {
+  try {
+    if (typeof path !== 'string') return false
+    if (!path.startsWith('/')) return false
+    if (/[\0\r\n]/.test(path)) return false
+    const result = await shell.openPath(path)
+    return result === ''
   } catch {
     return false
   }
@@ -898,7 +990,7 @@ ipcMain.handle(IPC.GET_DIAGNOSTICS, () => {
 
 ipcMain.handle(IPC.OPEN_IN_TERMINAL, (_event, arg: string | null | { sessionId?: string | null; projectPath?: string }) => {
   const { execFile } = require('child_process')
-  const claudeBin = 'claude'
+  const cliBin = findCliBinary()
 
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -935,9 +1027,9 @@ ipcMain.handle(IPC.OPEN_IN_TERMINAL, (_event, arg: string | null | { sessionId?:
   let cmd: string
   if (sessionId) {
     // sessionId is UUID-validated above, safe to embed directly
-    cmd = `cd ${safeDir} && ${claudeBin} --resume ${sessionId}`
+    cmd = `cd ${safeDir} && ${cliBin} --resume ${sessionId}`
   } else {
-    cmd = `cd ${safeDir} && ${claudeBin}`
+    cmd = `cd ${safeDir} && ${cliBin}`
   }
 
   const script = `tell application "Terminal"
@@ -977,6 +1069,161 @@ ipcMain.handle(IPC.MARKETPLACE_INSTALL, async (_event, { repo, pluginName, marke
 ipcMain.handle(IPC.MARKETPLACE_UNINSTALL, async (_event, { pluginName }: { pluginName: string }) => {
   log(`IPC MARKETPLACE_UNINSTALL: ${pluginName}`)
   return uninstallPlugin(pluginName)
+})
+
+// ─── OpenClaw Controls ───
+
+ipcMain.handle(IPC.OPENCLAW_HEALTH, async () => {
+  const { execFileSync } = require('child_process')
+  const cliBin = findCliBinary()
+  try {
+    const output = execFileSync(cliBin, ['health'], {
+      encoding: 'utf-8',
+      timeout: 8000,
+      env: getCliEnv(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim()
+    return { ok: true, output, error: null }
+  } catch (err: any) {
+    const stderr = String(err?.stderr || '').trim()
+    const stdout = String(err?.stdout || '').trim()
+    return { ok: false, output: stdout, error: stderr || 'Health check failed' }
+  }
+})
+
+ipcMain.handle(IPC.OPENCLAW_ONBOARD, async () => {
+  const { execFile } = require('child_process')
+  const cliBin = findCliBinary()
+  const home = homedir()
+
+  const shellSingleQuote = (s: string): string => "'" + s.replace(/'/g, "'\\''") + "'"
+  const escapeAppleScript = (s: string): string => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  const safeDir = escapeAppleScript(shellSingleQuote(home))
+  const safeBin = escapeAppleScript(shellSingleQuote(cliBin))
+  const cmd = `cd ${safeDir} && ${safeBin} onboard`
+
+  const script = `tell application "Terminal"
+  activate
+  do script "${cmd}"
+end tell`
+
+  return await new Promise<{ ok: boolean; error?: string }>((resolve) => {
+    execFile('/usr/bin/osascript', ['-e', script], (err: Error | null) => {
+      if (err) {
+        resolve({ ok: false, error: err.message })
+      } else {
+        resolve({ ok: true })
+      }
+    })
+  })
+})
+
+ipcMain.handle(IPC.OPENCLAW_MODEL_INFO, async () => {
+  try {
+    const config = readOpenclawConfig()
+    const providersMap = config.models?.providers || {}
+    const providers = Object.entries(providersMap).map(([id, info]) => ({
+      id,
+      models: (info.models || [])
+        .map((m) => ({ id: String(m.id || '').trim(), name: String(m.name || m.id || '').trim() }))
+        .filter((m) => m.id),
+    }))
+
+    const primary = config.agents?.defaults?.model?.primary || ''
+    let provider: string | null = null
+    let model: string | null = null
+    if (primary.includes('/')) {
+      const parts = primary.split('/')
+      provider = parts[0] || null
+      model = parts.slice(1).join('/') || null
+    }
+
+    return { ok: true, provider, model, providers }
+  } catch (err: any) {
+    return { ok: false, provider: null, model: null, providers: [], error: err?.message || 'Failed to load model info' }
+  }
+})
+
+ipcMain.handle(IPC.OPENCLAW_SET_MODEL, async (_event, { provider, model }: { provider: string; model: string }) => {
+  try {
+    if (!provider || !model) return { ok: false, error: 'provider and model are required' }
+    const config = readOpenclawConfig()
+    const providerNode = config.models?.providers?.[provider]
+    if (!providerNode) return { ok: false, error: `Unknown provider: ${provider}` }
+    const hasModel = (providerNode.models || []).some((m) => (m.id || '') === model)
+    if (!hasModel) return { ok: false, error: `Unknown model for provider ${provider}: ${model}` }
+
+    if (!config.agents) config.agents = {}
+    if (!config.agents.defaults) config.agents.defaults = {}
+    if (!config.agents.defaults.model) config.agents.defaults.model = {}
+
+    config.agents.defaults.model.primary = `${provider}/${model}`
+    const fallbacks = config.agents.defaults.model.fallbacks || []
+    config.agents.defaults.model.fallbacks = fallbacks.filter((f) => String(f).startsWith(`${provider}/`))
+
+    writeOpenclawConfig(config)
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Failed to update model' }
+  }
+})
+
+ipcMain.handle(IPC.OPENCLAW_RUN, async (_event, { action }: { action: string }) => {
+  const { execFileSync } = require('child_process')
+  const cliBin = findCliBinary()
+  const commandMap: Record<string, string[][]> = {
+    gateway_start: [['gateway', 'start']],
+    gateway_stop: [['gateway', 'stop']],
+    channels_status: [['channels', 'status']],
+    plugins_list: [['plugins', 'list']],
+    skills_list: [['skills', 'list']],
+    update_check: [
+      ['update', 'check'],
+      ['update', 'status'],
+      ['update'],
+    ],
+    update_upgrade: [
+      ['update', 'upgrade'],
+      ['update', 'install'],
+      ['update'],
+    ],
+    gateway_link_whatsapp_qr: [
+      ['channels', 'whatsapp', 'link'],
+      ['channels', 'whatsapp', 'qr'],
+      ['channels', 'link', 'whatsapp'],
+    ],
+  }
+  let candidates = commandMap[action]
+  if (!candidates && action.startsWith('clawhub_install:')) {
+    const slug = action.slice('clawhub_install:'.length).trim()
+    if (!/^[a-z0-9][a-z0-9-]*$/i.test(slug)) {
+      return { ok: false, output: '', error: `Invalid skill slug: ${slug}` }
+    }
+    candidates = [['clawhub', 'install', slug]]
+  }
+  if (!candidates || candidates.length === 0) return { ok: false, output: '', error: `Unsupported action: ${action}` }
+
+  let lastError = 'Command failed'
+  let lastStdout = ''
+  const tried: string[] = []
+
+  for (const args of candidates) {
+    tried.push([cliBin, ...args].join(' '))
+    try {
+      const output = execFileSync(cliBin, args, {
+        encoding: 'utf-8',
+        timeout: 15000,
+        env: getCliEnv(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim()
+      return { ok: true, output }
+    } catch (err: any) {
+      lastError = String(err?.stderr || '').trim() || String(err?.message || 'Command failed')
+      lastStdout = String(err?.stdout || '').trim()
+    }
+  }
+
+  return { ok: false, output: lastStdout, error: `${lastError}\nTried:\n${tried.join('\n')}`.trim() }
 })
 
 // ─── Theme Detection ───
@@ -1068,16 +1315,28 @@ app.whenReady().then(async () => {
     log('Alt+Space shortcut registration failed — macOS input sources may claim it')
   }
   globalShortcut.register('CommandOrControl+Shift+K', () => toggleWindow('shortcut Cmd/Ctrl+Shift+K'))
+  globalShortcut.register('CommandOrControl+Shift+M', () => {
+    showWindow('shortcut Cmd/Ctrl+Shift+M')
+    broadcast('clui:shortcut-action', 'toggle-marketplace')
+  })
+  globalShortcut.register('CommandOrControl+Shift+A', () => {
+    showWindow('shortcut Cmd/Ctrl+Shift+A')
+    broadcast('clui:shortcut-action', 'open-agents')
+  })
+  globalShortcut.register('CommandOrControl+Shift+S', () => {
+    showWindow('shortcut Cmd/Ctrl+Shift+S')
+    broadcast('clui:shortcut-action', 'open-settings')
+  })
 
   const trayIconPath = join(__dirname, '../../resources/trayTemplate.png')
   const trayIcon = nativeImage.createFromPath(trayIconPath)
   trayIcon.setTemplateImage(true)
   tray = new Tray(trayIcon)
-  tray.setToolTip('Clui CC — Claude Code UI')
+  tray.setToolTip('OpenClaw UI')
   tray.on('click', () => toggleWindow('tray click'))
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Show Clui CC', click: () => showWindow('tray menu') },
+      { label: 'Show OpenClaw UI', click: () => showWindow('tray menu') },
       { label: 'Quit', click: () => { app.quit() } },
     ])
   )

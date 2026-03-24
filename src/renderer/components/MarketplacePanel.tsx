@@ -111,7 +111,7 @@ export function MarketplacePanel() {
               Skills Marketplace
             </div>
             <div style={{ fontSize: 11, color: colors.textTertiary, marginTop: 2 }}>
-              Install skills and plugins without leaving CLUI
+              Install skills and plugins without leaving OpenClaw UI
             </div>
           </div>
         </div>
@@ -308,6 +308,10 @@ function PluginCard({ plugin, status, colors, expanded, onToggleExpand, scrollCo
 
   const handleInstallClick = (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (plugin.installMode === 'clawhub') {
+      if (status === 'failed' || status === 'not_installed') installPlugin(plugin)
+      return
+    }
     if (status === 'failed') {
       installPlugin(plugin)
     } else {
@@ -345,6 +349,14 @@ function PluginCard({ plugin, status, colors, expanded, onToggleExpand, scrollCo
   const safeAuthor = plugin.author || 'Unknown'
   const safeRepo = plugin.repo || 'unknown/repo'
   const safeVersion = plugin.version || 'n/a'
+  const installMode = plugin.installMode || 'native'
+  const isClawhubSkill = installMode === 'clawhub'
+  const installCommand = plugin.installCommand
+    || (isClawhubSkill
+      ? `clawhub install ${plugin.installName}`
+      : plugin.isSkillMd
+        ? `~/.openclaw/skills/${plugin.installName}/SKILL.md`
+        : `openclaw plugin install ${plugin.installName}@${safeMarketplace}`)
 
   const githubButton = (
     <button
@@ -408,7 +420,7 @@ function PluginCard({ plugin, status, colors, expanded, onToggleExpand, scrollCo
             </div>
             <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
               {githubButton}
-              <StatusButton status={status} colors={colors} onClick={handleInstallClick} onUninstall={(e) => { e.stopPropagation(); uninstallPlugin(plugin) }} />
+              <StatusButton status={status} colors={colors} onClick={handleInstallClick} onUninstall={(e) => { e.stopPropagation(); uninstallPlugin(plugin) }} installMode={installMode} />
             </div>
           </div>
 
@@ -428,7 +440,7 @@ function PluginCard({ plugin, status, colors, expanded, onToggleExpand, scrollCo
           </div>
 
           {/* Confirm panel or installing status */}
-          {showConfirm && status === 'not_installed' && (
+          {showConfirm && status === 'not_installed' && !isClawhubSkill && (
             <div style={{
               padding: '10px 12px', borderRadius: 10, marginTop: 10,
               background: colors.surfacePrimary, border: `1px solid ${colors.containerBorder}`,
@@ -441,10 +453,7 @@ function PluginCard({ plugin, status, colors, expanded, onToggleExpand, scrollCo
                 background: colors.codeBg, padding: '4px 6px', borderRadius: 4,
                 lineHeight: 1.6,
               }}>
-                {plugin.isSkillMd
-                  ? <>~/.claude/skills/{plugin.installName}/SKILL.md</>
-                  : <>claude plugin install {plugin.installName}@{safeMarketplace}</>
-                }
+                {installCommand}
               </div>
               <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                 <button
@@ -469,6 +478,41 @@ function PluginCard({ plugin, status, colors, expanded, onToggleExpand, scrollCo
                   Cancel
                 </button>
               </div>
+            </div>
+          )}
+
+          {isClawhubSkill && (
+            <div style={{
+              padding: '10px 12px', borderRadius: 10, marginTop: 10,
+              background: colors.surfacePrimary, border: `1px solid ${colors.containerBorder}`,
+            }}>
+              <div style={{ fontSize: 10, color: colors.textTertiary, marginBottom: 4 }}>
+                Install from ClawHub:
+              </div>
+              <div style={{
+                fontSize: 10, fontFamily: 'monospace', color: colors.textSecondary,
+                background: colors.codeBg, padding: '4px 6px', borderRadius: 4,
+                lineHeight: 1.6,
+              }}>
+                {installCommand}
+              </div>
+              {plugin.externalUrl && (
+                <div style={{ marginTop: 8 }}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      window.clui.openExternal(plugin.externalUrl!)
+                    }}
+                    style={{
+                      fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
+                      background: colors.accent, color: colors.textOnAccent, border: 'none',
+                      cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    Open Skill Page
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -520,7 +564,7 @@ function PluginCard({ plugin, status, colors, expanded, onToggleExpand, scrollCo
           </div>
           <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
             {githubButton}
-            <StatusButton status={status} colors={colors} onClick={handleInstallClick} onUninstall={(e) => { e.stopPropagation(); uninstallPlugin(plugin) }} />
+            <StatusButton status={status} colors={colors} onClick={handleInstallClick} onUninstall={(e) => { e.stopPropagation(); uninstallPlugin(plugin) }} installMode={installMode} />
           </div>
         </div>
       )}
@@ -530,13 +574,80 @@ function PluginCard({ plugin, status, colors, expanded, onToggleExpand, scrollCo
 
 // ─── StatusButton ───
 
-function StatusButton({ status, colors, onClick, onUninstall }: {
+function StatusButton({ status, colors, onClick, onUninstall, installMode }: {
   status: PluginStatus
   colors: ReturnType<typeof useColors>
   onClick: (e: React.MouseEvent) => void
   onUninstall?: (e: React.MouseEvent) => void
+  installMode?: CatalogPlugin['installMode']
 }) {
   const [hovered, setHovered] = useState(false)
+  const isClawhubSkill = installMode === 'clawhub'
+
+  if (isClawhubSkill) {
+    if (status === 'installing') {
+      return (
+        <span style={{
+          fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 8,
+          background: colors.accentLight, color: colors.accent,
+          display: 'flex', alignItems: 'center', gap: 4,
+          whiteSpace: 'nowrap',
+        }}>
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+            style={{ display: 'flex' }}
+          >
+            <SpinnerGap size={10} />
+          </motion.div>
+          Installing...
+        </span>
+      )
+    }
+    if (status === 'installed') {
+      return (
+        <span style={{
+          fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 8,
+          background: colors.statusCompleteBg, color: colors.statusComplete,
+          border: 'none',
+          whiteSpace: 'nowrap',
+        }}>
+          Installed
+        </span>
+      )
+    }
+    if (status === 'failed') {
+      return (
+        <button
+          onClick={onClick}
+          style={{
+            fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 8,
+            background: colors.statusErrorBg, color: colors.statusError,
+            border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Failed - Retry
+        </button>
+      )
+    }
+    return (
+      <button
+        onClick={onClick}
+        style={{
+          fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 8,
+          background: colors.accentLight, color: colors.accent,
+          border: `1px solid ${colors.accentBorder}`,
+          cursor: 'pointer', fontFamily: 'inherit',
+          transition: 'all 0.15s',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        Install
+      </button>
+    )
+  }
+
   switch (status) {
     case 'installed':
       return (

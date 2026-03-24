@@ -4,7 +4,17 @@ import type { RunOptions, NormalizedEvent, HealthReport, EnrichedError, Attachme
 
 export interface CluiAPI {
   // ─── Request-response (renderer → main) ───
-  start(): Promise<{ version: string; auth: { email?: string; subscriptionType?: string; authMethod?: string }; mcpServers: string[]; projectPath: string; homePath: string }>
+  start(): Promise<{
+    version: string
+    auth: { email?: string; subscriptionType?: string; authMethod?: string }
+    mcpServers: string[]
+    projectPath: string
+    homePath: string
+    cliBinary: string
+    cliCommand: string
+    authSupported: boolean
+    mcpSupported: boolean
+  }>
   createTab(): Promise<{ tabId: string }>
   prompt(tabId: string, requestId: string, options: RunOptions): Promise<void>
   cancel(requestId: string): Promise<boolean>
@@ -30,6 +40,18 @@ export interface CluiAPI {
   listInstalledPlugins(): Promise<string[]>
   installPlugin(repo: string, pluginName: string, marketplace: string, sourcePath?: string, isSkillMd?: boolean): Promise<{ ok: boolean; error?: string }>
   uninstallPlugin(pluginName: string): Promise<{ ok: boolean; error?: string }>
+  openclawHealth(): Promise<{ ok: boolean; output: string; error: string | null }>
+  openclawOnboard(): Promise<{ ok: boolean; error?: string }>
+  openPath(path: string): Promise<boolean>
+  openclawModelInfo(): Promise<{
+    ok: boolean
+    provider: string | null
+    model: string | null
+    providers: Array<{ id: string; models: Array<{ id: string; name: string }> }>
+    error?: string
+  }>
+  openclawSetModel(provider: string, model: string): Promise<{ ok: boolean; error?: string }>
+  openclawRun(action: string): Promise<{ ok: boolean; output: string; error?: string }>
   setPermissionMode(mode: string): void
   getTheme(): Promise<{ isDark: boolean }>
   onThemeChange(callback: (isDark: boolean) => void): () => void
@@ -49,6 +71,7 @@ export interface CluiAPI {
   onError(callback: (tabId: string, error: EnrichedError) => void): () => void
   onSkillStatus(callback: (status: { name: string; state: string; error?: string; reason?: string }) => void): () => void
   onWindowShown(callback: () => void): () => void
+  onShortcutAction(callback: (action: string) => void): () => void
 }
 
 const api: CluiAPI = {
@@ -82,6 +105,12 @@ const api: CluiAPI = {
     ipcRenderer.invoke(IPC.MARKETPLACE_INSTALL, { repo, pluginName, marketplace, sourcePath, isSkillMd }),
   uninstallPlugin: (pluginName) =>
     ipcRenderer.invoke(IPC.MARKETPLACE_UNINSTALL, { pluginName }),
+  openclawHealth: () => ipcRenderer.invoke(IPC.OPENCLAW_HEALTH),
+  openclawOnboard: () => ipcRenderer.invoke(IPC.OPENCLAW_ONBOARD),
+  openPath: (path) => ipcRenderer.invoke(IPC.OPEN_PATH, path),
+  openclawModelInfo: () => ipcRenderer.invoke(IPC.OPENCLAW_MODEL_INFO),
+  openclawSetModel: (provider, model) => ipcRenderer.invoke(IPC.OPENCLAW_SET_MODEL, { provider, model }),
+  openclawRun: (action) => ipcRenderer.invoke(IPC.OPENCLAW_RUN, { action }),
   setPermissionMode: (mode) => ipcRenderer.send(IPC.SET_PERMISSION_MODE, mode),
   getTheme: () => ipcRenderer.invoke(IPC.GET_THEME),
   onThemeChange: (callback) => {
@@ -137,6 +166,12 @@ const api: CluiAPI = {
     const handler = () => callback()
     ipcRenderer.on(IPC.WINDOW_SHOWN, handler)
     return () => ipcRenderer.removeListener(IPC.WINDOW_SHOWN, handler)
+  },
+
+  onShortcutAction: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, action: string) => callback(action)
+    ipcRenderer.on('clui:shortcut-action', handler)
+    return () => ipcRenderer.removeListener('clui:shortcut-action', handler)
   },
 }
 

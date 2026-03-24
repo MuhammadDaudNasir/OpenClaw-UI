@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Terminal, CaretDown, Check, FolderOpen, Plus, X, ShieldCheck } from '@phosphor-icons/react'
-import { useSessionStore, AVAILABLE_MODELS, getModelDisplayLabel } from '../stores/sessionStore'
+import { useSessionStore, getModelDisplayLabel } from '../stores/sessionStore'
 import { usePopoverLayer } from './PopoverLayer'
 import { useColors } from '../theme'
 
@@ -11,6 +11,9 @@ import { useColors } from '../theme'
 function ModelPicker() {
   const preferredModel = useSessionStore((s) => s.preferredModel)
   const setPreferredModel = useSessionStore((s) => s.setPreferredModel)
+  const setOpenclawModel = useSessionStore((s) => s.setOpenclawModel)
+  const openclawModels = useSessionStore((s) => s.openclawModels)
+  const activeProvider = useSessionStore((s) => s.activeProvider)
   const tab = useSessionStore(
     (s) => s.tabs.find((t) => t.id === s.activeTabId),
     (a, b) => a === b || (!!a && !!b && a.status === b.status && a.sessionModel === b.sessionModel),
@@ -54,13 +57,13 @@ function ModelPicker() {
 
   const activeLabel = (() => {
     if (preferredModel) {
-      const m = AVAILABLE_MODELS.find((m) => m.id === preferredModel)
+      const m = openclawModels.find((m) => m.id === preferredModel)
       return m?.label || getModelDisplayLabel(preferredModel)
     }
     if (tab?.sessionModel) {
       return getModelDisplayLabel(tab.sessionModel)
     }
-    return AVAILABLE_MODELS[0].label
+    return openclawModels[0]?.label || 'Model'
   })()
 
   return (
@@ -102,12 +105,16 @@ function ModelPicker() {
           }}
         >
           <div className="py-1">
-            {AVAILABLE_MODELS.map((m) => {
-              const isSelected = preferredModel === m.id || (!preferredModel && m.id === AVAILABLE_MODELS[0].id)
+            {openclawModels.map((m) => {
+              const isSelected = preferredModel === m.id
               return (
                 <button
                   key={m.id}
-                  onClick={() => { setPreferredModel(m.id); setOpen(false) }}
+                  onClick={() => {
+                    setPreferredModel(m.id)
+                    if (activeProvider) void setOpenclawModel(activeProvider, m.id)
+                    setOpen(false)
+                  }}
                   className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] transition-colors"
                   style={{
                     color: isSelected ? colors.textPrimary : colors.textSecondary,

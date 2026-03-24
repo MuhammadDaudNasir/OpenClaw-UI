@@ -17,11 +17,12 @@
 
 import { EventEmitter } from 'events'
 import { homedir } from 'os'
-import { join } from 'path'
+import { join, basename } from 'path'
 import { execSync } from 'child_process'
 import { appendFileSync, chmodSync, existsSync, statSync } from 'fs'
 import type { NormalizedEvent, RunOptions, EnrichedError } from '../../shared/types'
 import { getCliEnv } from '../cli-env'
+import { findCliBinary } from '../openclaw/runtime'
 
 // node-pty is a native module — require at runtime to avoid Vite bundling issues
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -188,6 +189,14 @@ function isInputPrompt(line: string): boolean {
 function isUiChrome(line: string): boolean {
   const cleaned = line.trim()
   if (!cleaned) return true
+  if (/^🦞\s+OpenClaw\b/i.test(cleaned)) return true
+  if (/^\s*◇\s*Doctor warnings/i.test(cleaned)) return true
+  if (/^openclaw\s+tui\b/i.test(cleaned)) return true
+  if (/^\s*(?:connected|connecting|idle)\s*\|\s*idle\b/i.test(cleaned)) return true
+  if (/agent\s+[^\|]+\s+\|\s+session\s+[^\|]+/i.test(cleaned)) return true
+  if (/\|\s+think\s+\w+\s+\|\s+tokens\s+/i.test(cleaned)) return true
+  if (/^\s*tokens\s+\?\/\d+/i.test(cleaned)) return true
+  if (/^\s*session\s+agent:/i.test(cleaned)) return true
   if (/^[╭│╰─┌└┃┏┗┐┘┤├┬┴┼]/.test(cleaned)) return true
   if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏✢✳✶✻✽]/.test(cleaned)) return true
   if (/^\s*(?:Medium|Low|High)\s/.test(cleaned) && /model/i.test(cleaned)) return true
@@ -268,6 +277,8 @@ export interface PtyRunHandle {
   promptSnippet: string
   /** Whether we saw an echoed prompt for current request */
   sawPromptEcho: boolean
+  /** OpenClaw native TUI mode (different output semantics) */
+  openclawTuiMode: boolean
 }
 
 // ─── PtyRunManager ───
@@ -279,9 +290,9 @@ export class PtyRunManager extends EventEmitter {
 
   constructor() {
     super()
-    this.claudeBinary = this._findClaudeBinary()
+    this.claudeBinary = findCliBinary()
     this._ensureSpawnHelperExecutable()
-    log(`Claude binary: ${this.claudeBinary}`)
+    log(`CLI binary: ${this.claudeBinary}`)
   }
 
   /**
@@ -310,31 +321,6 @@ export class PtyRunManager extends EventEmitter {
     }
   }
 
-  private _findClaudeBinary(): string {
-    const candidates = [
-      '/usr/local/bin/claude',
-      '/opt/homebrew/bin/claude',
-      join(homedir(), '.npm-global/bin/claude'),
-    ]
-
-    for (const c of candidates) {
-      try {
-        execSync(`test -x "${c}"`, { stdio: 'ignore' })
-        return c
-      } catch {}
-    }
-
-    try {
-      return execSync('/bin/zsh -ilc "whence -p claude"', { encoding: 'utf-8', env: getCliEnv() }).trim()
-    } catch {}
-
-    try {
-      return execSync('/bin/bash -lc "which claude"', { encoding: 'utf-8', env: getCliEnv() }).trim()
-    } catch {}
-
-    return 'claude'
-  }
-
   private _getEnv(): NodeJS.ProcessEnv {
     const env = getCliEnv()
     const binDir = this.claudeBinary.substring(0, this.claudeBinary.lastIndexOf('/'))
@@ -352,26 +338,30 @@ export class PtyRunManager extends EventEmitter {
 
     const cwd = options.projectPath === '~' ? homedir() : options.projectPath
 
-    // Build args for interactive mode (no -p flag)
-    const args: string[] = [
-      '--permission-mode', 'default',
-    ]
+    const isOpenclaw = basename(this.claudeBinary).includes('openclaw')
+    const args: string[] = []
 
-    if (options.sessionId) {
-      args.push('--resume', options.sessionId)
+    if (isOpenclaw) {
+      // OpenClaw does not support Claude-style PTY flags. Use native TUI mode.
+      args.push('tui', '--message', options.prompt, '--session', options.sessionId || 'clui-main')
+    } else {
+      // Claude-style interactive mode (no -p flag)
+      args.push('--permission-mode', 'default')
+      if (options.sessionId) {
+        args.push('--resume', options.sessionId)
+      }
+      if (options.model) {
+        args.push('--model', options.model)
+      }
+      if (options.allowedTools?.length) {
+        args.push('--allowedTools', options.allowedTools.join(','))
+      }
+      if (options.systemPrompt) {
+        args.push('--system-prompt', options.systemPrompt)
+      }
+      // Pass prompt as positional argument
+      args.push(options.prompt)
     }
-    if (options.model) {
-      args.push('--model', options.model)
-    }
-    if (options.allowedTools?.length) {
-      args.push('--allowedTools', options.allowedTools.join(','))
-    }
-    if (options.systemPrompt) {
-      args.push('--system-prompt', options.systemPrompt)
-    }
-
-    // Pass prompt as positional argument
-    args.push(options.prompt)
 
     log(`Starting PTY run ${requestId}: ${this.claudeBinary} ${args.join(' ')}`)
     log(`Prompt: ${options.prompt.substring(0, 200)}`)
@@ -409,6 +399,22 @@ export class PtyRunManager extends EventEmitter {
       lastOutputAt: Date.now(),
       promptSnippet: options.prompt.trim().toLowerCase().slice(0, 24),
       sawPromptEcho: false,
+      openclawTuiMode: isOpenclaw,
+    }
+
+    if (isOpenclaw) {
+      handle.sessionId = options.sessionId || 'clui-main'
+      handle.emittedSessionInit = true
+      handle.pastInit = true
+      this.emit('normalized', requestId, {
+        type: 'session_init',
+        sessionId: handle.sessionId,
+        tools: [],
+        model: options.model || '',
+        mcpServers: [],
+        skills: [],
+        version: '',
+      } as NormalizedEvent)
     }
 
     // ─── PTY output parser pipeline ───
@@ -514,6 +520,7 @@ export class PtyRunManager extends EventEmitter {
   private _processLine(requestId: string, handle: PtyRunHandle, rawLine: string): void {
     const cleaned = stripAnsi(rawLine).trim()
     if (cleaned.length === 0) return
+    if (handle.openclawTuiMode && isUiChrome(cleaned)) return
 
     // Ignore terminal mode toggles and redraw control fragments.
     if (/^(?:\?[0-9;?]*[a-zA-Z])+$/i.test(cleaned)) return

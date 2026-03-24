@@ -33,22 +33,22 @@ const darkColors = {
   textTertiary: '#76766e',
   textMuted: '#353530',
 
-  // Accent — orange
-  accent: '#d97757',
-  accentLight: 'rgba(217, 119, 87, 0.1)',
-  accentSoft: 'rgba(217, 119, 87, 0.15)',
+  // Accent — OpenClaw red
+  accent: '#e24a4a',
+  accentLight: 'rgba(226, 74, 74, 0.12)',
+  accentSoft: 'rgba(226, 74, 74, 0.18)',
 
   // Status dots
   statusIdle: '#8a8a80',
-  statusRunning: '#d97757',
-  statusRunningBg: 'rgba(217, 119, 87, 0.1)',
+  statusRunning: '#e24a4a',
+  statusRunningBg: 'rgba(226, 74, 74, 0.12)',
   statusComplete: '#7aac8c',
   statusCompleteBg: 'rgba(122, 172, 140, 0.1)',
   statusError: '#c47060',
   statusErrorBg: 'rgba(196, 112, 96, 0.08)',
   statusDead: '#c47060',
-  statusPermission: '#d97757',
-  statusPermissionGlow: 'rgba(217, 119, 87, 0.4)',
+  statusPermission: '#e24a4a',
+  statusPermissionGlow: 'rgba(226, 74, 74, 0.4)',
 
   // Tab
   tabActive: '#353530',
@@ -81,9 +81,9 @@ const darkColors = {
   stopHover: '#dc2626',
 
   // Send button
-  sendBg: '#d97757',
-  sendHover: '#c96442',
-  sendDisabled: 'rgba(217, 119, 87, 0.3)',
+  sendBg: '#e24a4a',
+  sendHover: '#cd3f3f',
+  sendDisabled: 'rgba(226, 74, 74, 0.3)',
 
   // Popover
   popoverBg: '#292927',
@@ -112,8 +112,8 @@ const darkColors = {
   btnHoverBg: '#302f2d',
 
   // Accent border variants (replaces hex-alpha concatenation antipattern)
-  accentBorder: 'rgba(217, 119, 87, 0.19)',
-  accentBorderMedium: 'rgba(217, 119, 87, 0.25)',
+  accentBorder: 'rgba(226, 74, 74, 0.2)',
+  accentBorderMedium: 'rgba(226, 74, 74, 0.28)',
 
   // Permission card (amber)
   permissionBorder: 'rgba(245, 158, 11, 0.3)',
@@ -163,22 +163,22 @@ const lightColors = {
   textTertiary: '#8a8a80',
   textMuted: '#dddad2',
 
-  // Accent — orange (same)
-  accent: '#d97757',
-  accentLight: 'rgba(217, 119, 87, 0.1)',
-  accentSoft: 'rgba(217, 119, 87, 0.12)',
+  // Accent — OpenClaw red
+  accent: '#e24a4a',
+  accentLight: 'rgba(226, 74, 74, 0.12)',
+  accentSoft: 'rgba(226, 74, 74, 0.15)',
 
   // Status dots
   statusIdle: '#8a8a80',
-  statusRunning: '#d97757',
-  statusRunningBg: 'rgba(217, 119, 87, 0.1)',
+  statusRunning: '#e24a4a',
+  statusRunningBg: 'rgba(226, 74, 74, 0.12)',
   statusComplete: '#5a9e6f',
   statusCompleteBg: 'rgba(90, 158, 111, 0.1)',
   statusError: '#c47060',
   statusErrorBg: 'rgba(196, 112, 96, 0.06)',
   statusDead: '#c47060',
-  statusPermission: '#d97757',
-  statusPermissionGlow: 'rgba(217, 119, 87, 0.3)',
+  statusPermission: '#e24a4a',
+  statusPermissionGlow: 'rgba(226, 74, 74, 0.3)',
 
   // Tab
   tabActive: '#edeae0',
@@ -211,9 +211,9 @@ const lightColors = {
   stopHover: '#dc2626',
 
   // Send button
-  sendBg: '#d97757',
-  sendHover: '#c96442',
-  sendDisabled: 'rgba(217, 119, 87, 0.3)',
+  sendBg: '#e24a4a',
+  sendHover: '#cd3f3f',
+  sendDisabled: 'rgba(226, 74, 74, 0.3)',
 
   // Popover
   popoverBg: '#f9f8f5',
@@ -242,8 +242,8 @@ const lightColors = {
   btnHoverBg: '#edeae0',
 
   // Accent border variants (replaces hex-alpha concatenation antipattern)
-  accentBorder: 'rgba(217, 119, 87, 0.19)',
-  accentBorderMedium: 'rgba(217, 119, 87, 0.25)',
+  accentBorder: 'rgba(226, 74, 74, 0.2)',
+  accentBorderMedium: 'rgba(226, 74, 74, 0.28)',
 
   // Permission card (amber)
   permissionBorder: 'rgba(245, 158, 11, 0.3)',
@@ -327,8 +327,8 @@ function saveSettings(s: { themeMode: ThemeMode; soundEnabled: boolean; expanded
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)) } catch {}
 }
 
-// Always start in compact UI mode on launch.
-const saved = { ...loadSettings(), expandedUI: false }
+// Respect persisted settings on launch (including full-width mode).
+const saved = loadSettings()
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
   isDark: saved.themeMode === 'dark' ? true : saved.themeMode === 'light' ? false : true,

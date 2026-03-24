@@ -240,12 +240,11 @@ export function ConversationView() {
         <div className="flex items-center gap-1.5 text-[11px] min-w-0">
           {isRunning && (
             <span className="flex items-center gap-1.5">
-              <span className="flex gap-[3px]">
-                <span className="w-[4px] h-[4px] rounded-full animate-bounce-dot" style={{ background: colors.statusRunning, animationDelay: '0ms' }} />
-                <span className="w-[4px] h-[4px] rounded-full animate-bounce-dot" style={{ background: colors.statusRunning, animationDelay: '150ms' }} />
-                <span className="w-[4px] h-[4px] rounded-full animate-bounce-dot" style={{ background: colors.statusRunning, animationDelay: '300ms' }} />
-              </span>
-              <span style={{ color: colors.textSecondary }}>{tab.currentActivity || 'Working...'}</span>
+              <span
+                className="w-[8px] h-[8px] rounded-full animate-pulse-dot"
+                style={{ background: colors.statusRunning, boxShadow: `0 0 10px ${colors.statusPermissionGlow}` }}
+              />
+              <span style={{ color: colors.textSecondary }}>Working...</span>
             </span>
           )}
 

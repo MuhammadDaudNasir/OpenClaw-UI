@@ -11,6 +11,7 @@ SDK_PATH=""
 
 step() { echo; echo "--- $1"; }
 pass() { echo "  OK: $1"; }
+warn() { echo "  WARN: $1"; }
 fail() { echo "  FAIL: $1"; fail=1; }
 fix() {
   echo
@@ -30,13 +31,13 @@ step "Checking environment"
 
 # macOS
 if [ "$(uname)" != "Darwin" ]; then
-  fail "Clui CC requires macOS 13+. Detected: $(uname). This project does not run on Linux or Windows."
+  fail "OpenClaw UI requires macOS 13+. Detected: $(uname). This project does not run on Linux or Windows."
 else
   macos_ver=$(sw_vers -productVersion 2>/dev/null || echo "0")
   if version_gte "$macos_ver" "13.0"; then
     pass "macOS $macos_ver"
   else
-    fail "macOS $macos_ver is too old. Clui CC requires macOS 13+."
+    fail "macOS $macos_ver is too old. OpenClaw UI requires macOS 13+."
     echo "  Update macOS in System Settings > General > Software Update."
   fi
 fi
@@ -47,7 +48,7 @@ if command -v node &>/dev/null; then
   if version_gte "$node_ver" "18.0.0"; then
     pass "Node.js v$node_ver"
   else
-    fail "Node.js v$node_ver is too old. Clui CC requires Node 18+."
+    fail "Node.js v$node_ver is too old. OpenClaw UI requires Node 18+."
     fix "brew install node"
   fi
 else
@@ -63,14 +64,16 @@ else
   fix "brew install node"
 fi
 
-# Python 3 + distutils
+# Python 3 + build tooling
 if command -v python3 &>/dev/null; then
   pass "Python $(python3 --version 2>&1 | awk '{print $2}')"
 
-  if python3 -c "import distutils" 2>/dev/null; then
-    pass "Python distutils available"
+  # Python 3.12+ removes stdlib distutils. Accept setuptools-backed distutils.
+  if python3 -c "import distutils" 2>/dev/null \
+    || python3 -c "import setuptools, setuptools._distutils" 2>/dev/null; then
+    pass "Python build tooling available"
   else
-    fail "Python is missing 'distutils' (needed by native module compiler)."
+    warn "Python build tooling missing (setuptools/distutils). Continuing for prebuilt installs."
     fix "python3 -m pip install --upgrade pip setuptools"
   fi
 else
@@ -126,12 +129,14 @@ else
   fix "xcode-select --install"
 fi
 
-# Claude CLI
-if command -v claude &>/dev/null; then
-  pass "Claude Code CLI found"
+# OpenClaw CLI (fallback: Claude CLI for compatibility)
+if command -v openclaw &>/dev/null; then
+  pass "OpenClaw CLI found"
+elif command -v claude &>/dev/null; then
+  pass "Claude CLI found (legacy compatibility mode)"
 else
-  fail "Claude Code CLI is not installed."
-  fix "npm install -g @anthropic-ai/claude-code"
+  fail "OpenClaw CLI is not installed."
+  fix "Install your OpenClaw CLI and make sure 'openclaw' is on PATH"
 fi
 
 # Bail if any check failed

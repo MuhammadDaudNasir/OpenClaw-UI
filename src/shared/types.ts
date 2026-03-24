@@ -292,6 +292,9 @@ export interface CatalogPlugin {
   category: string        // 'Agent Skills' | 'Knowledge Work' | 'Financial Services'
   tags: string[]          // Semantic use-case tags derived from name/description (e.g. 'Design', 'Finance')
   isSkillMd: boolean      // true = individual SKILL.md (direct install), false = CLI plugin (bundle install)
+  installMode?: 'native' | 'clawhub'
+  installCommand?: string
+  externalUrl?: string
 }
 
 // ─── IPC Channel Names ───
@@ -354,6 +357,14 @@ export const IPC = {
   MARKETPLACE_INSTALLED: 'clui:marketplace-installed',
   MARKETPLACE_INSTALL: 'clui:marketplace-install',
   MARKETPLACE_UNINSTALL: 'clui:marketplace-uninstall',
+
+  // OpenClaw controls
+  OPENCLAW_HEALTH: 'clui:openclaw-health',
+  OPENCLAW_ONBOARD: 'clui:openclaw-onboard',
+  OPEN_PATH: 'clui:open-path',
+  OPENCLAW_MODEL_INFO: 'clui:openclaw-model-info',
+  OPENCLAW_SET_MODEL: 'clui:openclaw-set-model',
+  OPENCLAW_RUN: 'clui:openclaw-run',
 
   // Permission mode
   SET_PERMISSION_MODE: 'clui:set-permission-mode',

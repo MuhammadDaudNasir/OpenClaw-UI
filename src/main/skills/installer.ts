@@ -14,11 +14,12 @@ import { homedir } from 'os'
 import { execSync } from 'child_process'
 import { randomUUID } from 'crypto'
 import { SKILLS, type SkillEntry } from './manifest'
+import { getPrimaryAgentHome } from '../openclaw/runtime'
 
 /** Directory containing bundled skill sources (relative to main process __dirname) */
 const BUNDLED_SKILLS_DIR = join(__dirname, '../../skills')
 
-const SKILLS_DIR = join(homedir(), '.claude', 'skills')
+const SKILLS_DIR = join(getPrimaryAgentHome(), 'skills')
 const VERSION_FILE = '.clui-version'
 
 export type SkillState = 'pending' | 'downloading' | 'validating' | 'installed' | 'failed' | 'skipped'
@@ -59,7 +60,7 @@ function writeVersionFile(skillDir: string, entry: SkillEntry): void {
     source: entry.source.type === 'github'
       ? `github:${entry.source.repo}@${entry.source.commitSha}`
       : 'bundled',
-    installedBy: 'clui',
+    installedBy: 'openclaw-ui',
     installedAt: new Date().toISOString(),
   }
   writeFileSync(join(skillDir, VERSION_FILE), JSON.stringify(meta, null, 2) + '\n')
@@ -113,7 +114,7 @@ async function installGithubSkill(
     // Atomic swap: remove old (if CLUI-managed), rename tmp into place
     if (existsSync(targetDir)) {
       const existing = readVersionFile(targetDir)
-      if (existing?.installedBy === 'clui') {
+      if (existing?.installedBy === 'openclaw-ui' || existing?.installedBy === 'clui') {
         rmSync(targetDir, { recursive: true, force: true })
       } else {
         // User-managed — shouldn't reach here (checked earlier), but be safe
@@ -168,7 +169,7 @@ async function installBundledSkill(
     // Atomic swap
     if (existsSync(targetDir)) {
       const existing = readVersionFile(targetDir)
-      if (existing?.installedBy === 'clui') {
+      if (existing?.installedBy === 'openclaw-ui' || existing?.installedBy === 'clui') {
         rmSync(targetDir, { recursive: true, force: true })
       } else {
         rmSync(tmpDir, { recursive: true, force: true })
@@ -207,7 +208,7 @@ async function installSkill(
       return
     }
 
-    if (meta.version === entry.version && meta.installedBy === 'clui') {
+    if (meta.version === entry.version && (meta.installedBy === 'openclaw-ui' || meta.installedBy === 'clui')) {
       // Re-validate required files to detect corrupt/partial installs
       const validationErr = validateSkill(targetDir, entry.requiredFiles)
       if (!validationErr) {

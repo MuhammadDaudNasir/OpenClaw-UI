@@ -157,16 +157,25 @@ input::placeholder {
   right: calc(100% + 10px);
   bottom: 0;
   height: 46px;
+  z-index: 26;
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  pointer-events: auto;
 }
 
 .btn-stack {
   position: relative;
-  width: 160px;
+  width: 168px;
   height: 46px;
   overflow: visible;
+}
+
+.btn-stack-four {
+  width: 188px;
+}
+.btn-stack-four-compact {
+  width: 148px;
 }
 
 .stack-btn {
@@ -188,13 +197,32 @@ input::placeholder {
 
 /* Collapsed: stacked on the right, overlapping */
 .stack-btn-1 { right: 0;    z-index: 3; }
-.stack-btn-2 { right: 28px; z-index: 2; }
-.stack-btn-3 { right: 56px; z-index: 1; }
+.stack-btn-2 { right: 24px; z-index: 2; }
+.stack-btn-3 { right: 48px; z-index: 1; }
+.stack-btn-4 { right: 72px; z-index: 1; }
 
 /* Expanded on hover: spread evenly */
 .btn-stack:hover .stack-btn-1 { right: 0; }
 .btn-stack:hover .stack-btn-2 { right: 56px; }
 .btn-stack:hover .stack-btn-3 { right: 112px; }
+
+.btn-stack-four:hover .stack-btn-1 { right: 0; }
+.btn-stack-four:hover .stack-btn-2 { right: 42px; }
+.btn-stack-four:hover .stack-btn-3 { right: 84px; }
+.btn-stack-four:hover .stack-btn-4 { right: 126px; }
+
+/* Compact mode keeps all 4 icons in-bounds when larger overlays are visible. */
+.circles-out-compact {
+  right: calc(100% - 32px);
+}
+.btn-stack-four-compact .stack-btn-1 { right: 0; z-index: 4; }
+.btn-stack-four-compact .stack-btn-2 { right: 18px; z-index: 3; }
+.btn-stack-four-compact .stack-btn-3 { right: 36px; z-index: 2; }
+.btn-stack-four-compact .stack-btn-4 { right: 54px; z-index: 1; }
+.btn-stack-four-compact:hover .stack-btn-1 { right: 0; }
+.btn-stack-four-compact:hover .stack-btn-2 { right: 34px; }
+.btn-stack-four-compact:hover .stack-btn-3 { right: 68px; }
+.btn-stack-four-compact:hover .stack-btn-4 { right: 102px; }
 
 /* ─── Drag region for frameless window ─── */
 .drag-region {

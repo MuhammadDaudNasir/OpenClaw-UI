@@ -1,7 +1,7 @@
 #!/bin/bash
-# Clui CC environment doctor — read-only diagnostics, no installs.
+# OpenClaw UI environment doctor — read-only diagnostics, no installs.
 
-echo "Clui CC Environment Check"
+echo "OpenClaw UI Environment Check"
 echo "========================="
 echo
 
@@ -25,6 +25,12 @@ check() {
   fi
 }
 
+warn_check() {
+  local label="$1"
+  local detail="$2"
+  printf "  WARN  %s — %s\n" "$label" "$detail"
+}
+
 # macOS
 if [ "$(uname)" = "Darwin" ]; then
   ver=$(sw_vers -productVersion 2>/dev/null || echo "0")
@@ -34,7 +40,7 @@ if [ "$(uname)" = "Darwin" ]; then
     check "macOS" "0" "$ver — requires 13+"
   fi
 else
-  check "macOS" "0" "not macOS ($(uname)) — Clui CC requires macOS"
+  check "macOS" "0" "not macOS ($(uname)) — OpenClaw UI requires macOS"
 fi
 
 # Node
@@ -64,15 +70,15 @@ else
   check "Python 3" "0" "not found — brew install python@3.11"
 fi
 
-# distutils
+# Python build tooling (distutils or setuptools fallback)
 if command -v python3 &>/dev/null; then
-  if python3 -c "import distutils" 2>/dev/null; then
-    check "distutils" "1" "importable"
+  if python3 -c "import distutils" 2>/dev/null || python3 -c "import setuptools, setuptools._distutils" 2>/dev/null; then
+    check "Python build tooling" "1" "setuptools/distutils importable"
   else
-    check "distutils" "0" "missing — python3 -m pip install --upgrade pip setuptools"
+    warn_check "Python build tooling" "missing — python3 -m pip install --upgrade pip setuptools"
   fi
 else
-  check "distutils" "0" "skipped (no python3)"
+  warn_check "Python build tooling" "skipped (no python3)"
 fi
 
 # Xcode CLT
@@ -112,12 +118,15 @@ else
   check "C++ headers" "0" "skipped (no clang++)"
 fi
 
-# Claude CLI
-if command -v claude &>/dev/null; then
+# OpenClaw CLI (fallback: Claude CLI)
+if command -v openclaw &>/dev/null; then
+  cver=$(openclaw --version 2>/dev/null || echo "unknown")
+  check "OpenClaw CLI" "1" "$cver"
+elif command -v claude &>/dev/null; then
   cver=$(claude --version 2>/dev/null || echo "unknown")
-  check "Claude CLI" "1" "$cver"
+  check "Claude CLI (legacy)" "1" "$cver"
 else
-  check "Claude CLI" "0" "not found — npm install -g @anthropic-ai/claude-code"
+  check "OpenClaw CLI" "0" "not found — install OpenClaw CLI and ensure 'openclaw' is on PATH"
 fi
 
 echo

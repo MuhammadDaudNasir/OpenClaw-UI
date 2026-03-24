@@ -1,6 +1,6 @@
-# Clui CC — Command Line User Interface for Claude Code
+# OpenClaw UI — Command Line User Interface for OpenClaw
 
-A lightweight, transparent desktop overlay for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) on macOS. Clui CC wraps the Claude Code CLI in a floating pill interface with multi-tab sessions, a permission approval UI, voice input, and a skills marketplace.
+A lightweight, transparent desktop overlay for OpenClaw on macOS. OpenClaw UI wraps the OpenClaw CLI in a floating pill interface with multi-tab sessions, a permission approval UI, voice input, and a skills marketplace.
 
 ## Demo
 
@@ -11,25 +11,25 @@ A lightweight, transparent desktop overlay for [Claude Code](https://docs.anthro
 ## Features
 
 - **Floating overlay** — transparent, click-through window that stays on top. Toggle with `⌥ + Space` (fallback: `Cmd+Shift+K`).
-- **Multi-tab sessions** — each tab spawns its own `claude -p` process with independent session state.
+- **Multi-tab sessions** — each tab spawns its own `openclaw -p` process with independent session state.
 - **Permission approval UI** — intercepts tool calls via PreToolUse HTTP hooks so you can review and approve/deny from the UI.
-- **Conversation history** — browse and resume past Claude Code sessions.
-- **Skills marketplace** — install plugins from Anthropic's GitHub repos without leaving Clui CC.
+- **Conversation history** — browse and resume past OpenClaw sessions.
+- **Skills marketplace** — install plugins from Anthropic's GitHub repos without leaving OpenClaw UI.
 - **Voice input** — local speech-to-text via Whisper (required, installed automatically).
 - **File & screenshot attachments** — paste images or attach files directly.
 - **Dual theme** — dark/light mode with system-follow option.
 
-## Why Clui CC
+## Why OpenClaw UI
 
-- **Claude Code, but visual** — keep CLI power while getting a fast desktop UX for approvals, history, and multitasking.
+- **OpenClaw, but visual** — keep CLI power while getting a fast desktop UX for approvals, history, and multitasking.
 - **Human-in-the-loop safety** — tool calls are reviewed and approved in-app before execution.
-- **Session-native workflow** — each tab runs an independent Claude session you can resume later.
-- **Local-first** — everything runs through your local Claude CLI. No telemetry, no cloud dependency.
+- **Session-native workflow** — each tab runs an independent OpenClaw session you can resume later.
+- **Local-first** — everything runs through your local OpenClaw CLI. No telemetry, no cloud dependency.
 
 ## How It Works
 
 ```
-UI prompt → Main process spawns claude -p → NDJSON stream → live render
+UI prompt → Main process spawns openclaw -p → NDJSON stream → live render
                                          → tool call? → permission UI → approve/deny
 ```
 
@@ -37,7 +37,37 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full deep-dive.
 
 ## Install App (Recommended)
 
-The fastest way to get Clui CC running as a regular Mac app. This installs dependencies, voice support (Whisper), builds the app, copies it to `/Applications`, and launches it.
+The fastest way to get OpenClaw UI running as a regular Mac app. This installs dependencies, voice support (Whisper), builds the app, copies it to `/Applications`, and launches it.
+
+## One Command Deploy
+
+From repo root:
+
+```bash
+./deploy.command
+```
+
+What it does: setup + dependency install + build + doctor + run.
+
+Other deploy modes:
+
+```bash
+# Deploy to /Applications as a standalone app
+./deploy.command --app
+```
+
+```bash
+# Setup/build only, don't auto-run
+./deploy.command --no-run
+```
+
+Remote one-liner installer (installs app into `/Applications`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MuhammadDaudNasir/OpenClaw-UI/main/install.sh | bash
+```
+
+After install, users can launch **OpenClaw UI** directly from Applications/Spotlight without Terminal.
 
 **1) Clone the repo**
 
@@ -52,9 +82,9 @@ Open the `clui-cc` folder in Finder and double-click `install-app.command`.
 > **First launch:** macOS may block the app because it's unsigned. Go to **System Settings → Privacy & Security → Open Anyway**. You only need to do this once.
 > **Folder cleanup:** the installer removes temporary `dist/` and `release/` folders after a successful install to keep the repo tidy.
 
-<p align="center"><img src="docs/shortcut.png" width="520" alt="Press Option + Space to show or hide Clui CC" /></p>
+<p align="center"><img src="docs/shortcut.png" width="520" alt="Press Option + Space to show or hide OpenClaw UI" /></p>
 
-After the initial install, just open **Clui CC** from your Applications folder or Spotlight.
+After the initial install, just open **OpenClaw UI** from your Applications folder or Spotlight.
 
 <details>
 <summary><strong>Terminal / Developer Commands</strong></summary>
@@ -72,7 +102,7 @@ cd clui-cc
 ```
 
 ```bash
-./commands/setup.command
+./commands/bootstrap.command
 ```
 
 ```bash
@@ -85,6 +115,23 @@ To stop:
 
 ```bash
 ./commands/stop.command
+```
+
+### Fast Install Modes
+
+```bash
+# Setup + build + doctor (source/dev workflow)
+./commands/bootstrap.command
+```
+
+```bash
+# Install standalone app to /Applications
+./commands/bootstrap.command --app
+```
+
+```bash
+# Setup + build + auto-run from source
+./commands/bootstrap.command --run
 ```
 
 ### Developer Workflow
@@ -103,14 +150,30 @@ Renderer changes update instantly. Main-process changes require restarting `npm 
 
 | Command | Purpose |
 |---------|---------|
+| `curl -fsSL https://raw.githubusercontent.com/MuhammadDaudNasir/OpenClaw-UI/main/install.sh \| bash` | One-liner remote install to `/Applications` |
+| `./deploy.command` | One command deploy (setup + build + run) |
+| `./commands/bootstrap.command` | One-command setup/build (supports `--app` and `--run`) |
+| `./commands/deploy.command` | Deploy entrypoint (`--app`, `--no-run`) |
 | `./commands/setup.command` | Environment check + install dependencies |
 | `./commands/start.command` | Build and launch from source |
-| `./commands/stop.command` | Stop all Clui CC processes |
+| `./commands/stop.command` | Stop all OpenClaw UI processes |
+| `./commands/setup-git.command --origin <url>` | Set your GitHub remote for this fork |
 | `npm run build` | Production build (no packaging) |
 | `npm run dist` | Package as macOS `.app` into `release/` |
 | `npm run doctor` | Run environment diagnostic |
 
 </details>
+
+## Publish Your Fork To GitHub
+
+Use the helper:
+
+```bash
+./commands/setup-git.command --origin https://github.com/<you>/<repo>.git
+git push -u origin $(git rev-parse --abbrev-ref HEAD)
+```
+
+Full guide: [`docs/GITHUB_SETUP.md`](docs/GITHUB_SETUP.md)
 
 <details>
 <summary><strong>Setup Prerequisites (Detailed)</strong></summary>
@@ -141,16 +204,16 @@ node --version
 python3 -m pip install --upgrade pip setuptools
 ```
 
-**Step 4.** Install Claude Code CLI:
+**Step 4.** Install OpenClaw CLI (or keep Claude CLI for compatibility mode):
 
 ```bash
-npm install -g @anthropic-ai/claude-code
+# Install your OpenClaw CLI package/binary here
 ```
 
-**Step 5.** Authenticate Claude Code (follow the prompts that appear):
+**Step 5.** Authenticate OpenClaw (follow the prompts that appear):
 
 ```bash
-claude
+openclaw
 ```
 
 **Step 6.** Install Whisper for voice input:
@@ -162,7 +225,7 @@ brew install whisperkit-cli
 brew install whisper-cpp
 ```
 
-> **No API keys or `.env` file required.** Clui CC uses your existing Claude Code CLI authentication (Pro/Team/Enterprise subscription).
+> **No API keys or `.env` file required.** OpenClaw UI uses your existing OpenClaw CLI authentication (Pro/Team/Enterprise subscription).
 
 </details>
 
@@ -190,7 +253,7 @@ src/
 
 ### How It Works
 
-1. Each tab creates a `claude -p --output-format stream-json` subprocess.
+1. Each tab creates a `openclaw -p --output-format stream-json` subprocess.
 2. NDJSON events are parsed by `RunManager` and normalized by `EventNormalizer`.
 3. `ControlPlane` manages tab lifecycle (connecting → idle → running → completed/failed/dead).
 4. Tool permission requests arrive via HTTP hooks to `PermissionServer` (localhost only).
@@ -199,14 +262,14 @@ src/
 
 ### Network Behavior
 
-Clui CC operates almost entirely offline. The only outbound network calls are:
+OpenClaw UI operates almost entirely offline. The only outbound network calls are:
 
 | Endpoint | Purpose | Required |
 |----------|---------|----------|
 | `raw.githubusercontent.com/anthropics/*` | Marketplace catalog (cached 5 min) | No — graceful fallback |
 | `api.github.com/repos/anthropics/*/tarball/*` | Skill auto-install on startup | No — skipped on failure |
 
-No telemetry, analytics, or auto-update mechanisms. All core Claude Code interaction goes through the local CLI.
+No telemetry, analytics, or auto-update mechanisms. All core OpenClaw interaction goes through the local CLI.
 
 </details>
 
@@ -228,12 +291,12 @@ npm run doctor
 | Node.js | 20.x LTS, 22.x |
 | Python | 3.12 (with setuptools installed) |
 | Electron | 33.x |
-| Claude Code CLI | 2.1.71 |
+| OpenClaw CLI | 2.1.71 |
 
 ## Known Limitations
 
 - **macOS only** — transparent overlay, tray icon, and node-pty are macOS-specific. Windows/Linux support is not currently implemented.
-- **Requires Claude Code CLI** — Clui CC is a UI layer, not a standalone AI client. You need an authenticated `claude` CLI.
+- **Requires OpenClaw CLI** — OpenClaw UI is a UI layer, not a standalone AI client. You need an authenticated `openclaw` CLI.
 - **Permission mode** — uses `--permission-mode default`. The PTY interactive transport is legacy and disabled by default.
 
 ## License
