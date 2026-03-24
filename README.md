@@ -1,12 +1,6 @@
 # OpenClaw UI — Command Line User Interface for OpenClaw
 
-A lightweight, transparent desktop overlay for OpenClaw on macOS. OpenClaw UI wraps the OpenClaw CLI in a floating pill interface with multi-tab sessions, a permission approval UI, voice input, and a skills marketplace.
-
-## Demo
-
-[![Watch the demo](https://img.youtube.com/vi/NqRBIpaA4Fk/maxresdefault.jpg)](https://www.youtube.com/watch?v=NqRBIpaA4Fk)
-
-<p align="center"><a href="https://www.youtube.com/watch?v=NqRBIpaA4Fk">▶ Watch the full demo on YouTube</a></p>
+A lightweight, transparent desktop overlay for OpenClaw on macOS. This fork focuses on one-command deploy, app-style installation, and OpenClaw-first onboarding/control workflows.
 
 ## Features
 
@@ -72,12 +66,12 @@ After install, users can launch **OpenClaw UI** directly from Applications/Spotl
 **1) Clone the repo**
 
 ```bash
-git clone https://github.com/lcoutodemos/clui-cc.git
+git clone https://github.com/MuhammadDaudNasir/OpenClaw-UI.git
 ```
 
 **2) Double-click `install-app.command`**
 
-Open the `clui-cc` folder in Finder and double-click `install-app.command`.
+Open the project folder in Finder and double-click `install-app.command`.
 
 > **First launch:** macOS may block the app because it's unsigned. Go to **System Settings → Privacy & Security → Open Anyway**. You only need to do this once.
 > **Folder cleanup:** the installer removes temporary `dist/` and `release/` folders after a successful install to keep the repo tidy.
@@ -94,11 +88,11 @@ Only `install-app.command` is kept at root intentionally for non-technical users
 ### Quick Start (Terminal)
 
 ```bash
-git clone https://github.com/lcoutodemos/clui-cc.git
+git clone https://github.com/MuhammadDaudNasir/OpenClaw-UI.git
 ```
 
 ```bash
-cd clui-cc
+cd OpenClaw-UI
 ```
 
 ```bash
@@ -298,6 +292,11 @@ npm run doctor
 - **macOS only** — transparent overlay, tray icon, and node-pty are macOS-specific. Windows/Linux support is not currently implemented.
 - **Requires OpenClaw CLI** — OpenClaw UI is a UI layer, not a standalone AI client. You need an authenticated `openclaw` CLI.
 - **Permission mode** — uses `--permission-mode default`. The PTY interactive transport is legacy and disabled by default.
+
+## Credits
+
+- Fork and active development: [Muhammad Daud Nasir](https://github.com/MuhammadDaudNasir)
+- Original project and foundation: [lcoutodemos](https://github.com/lcoutodemos) ([clui-cc](https://github.com/lcoutodemos/clui-cc))
 
 ## License
 

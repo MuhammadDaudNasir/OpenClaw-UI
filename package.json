@@ -5,12 +5,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lcoutodemos/clui-cc.git"
+    "url": "https://github.com/MuhammadDaudNasir/OpenClaw-UI.git"
   },
   "bugs": {
-    "url": "https://github.com/lcoutodemos/clui-cc/issues"
+    "url": "https://github.com/MuhammadDaudNasir/OpenClaw-UI/issues"
   },
-  "homepage": "https://github.com/lcoutodemos/clui-cc#readme",
+  "homepage": "https://github.com/MuhammadDaudNasir/OpenClaw-UI#readme",
   "main": "dist/main/index.js",
   "scripts": {
     "bootstrap": "bash ./commands/bootstrap.command",
