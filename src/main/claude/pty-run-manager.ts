@@ -467,6 +467,20 @@ export class PtyRunManager extends EventEmitter {
         const cleaned = stripAnsi(lineBuffer).trim()
         if (cleaned.length > 0) {
           this._checkPermissionInBuffer(requestId, handle, cleaned)
+          // OpenClaw TUI often redraws the input prompt without a trailing newline.
+          // Record prompt markers seen in the live line buffer so quiescence
+          // completion can still detect "ready for next input".
+          if (isInputPrompt(cleaned)) {
+            if (handle.ptyBuffer.length === 0 || handle.ptyBuffer[handle.ptyBuffer.length - 1] !== cleaned) {
+              this._ringPushBuffer(handle.ptyBuffer, cleaned)
+            }
+            handle.lastMeaningfulOutputAt = Date.now()
+            if (handle.quiescenceTimer) clearTimeout(handle.quiescenceTimer)
+            handle.quiescenceTimer = setTimeout(
+              () => this._checkQuiescenceCompletion(requestId, handle),
+              QUIESCENCE_MS,
+            )
+          }
         }
       }
     })
