@@ -1,11 +1,13 @@
-# OpenClaw UI — Command Line User Interface for OpenClaw
+# OpenClaw UI
 
 A lightweight, transparent desktop overlay for OpenClaw on macOS. This fork focuses on one-command deploy, app-style installation, and OpenClaw-first onboarding/control workflows.
+
+![OpenClaw UI Banner](resources/openclaw-ui-banner.svg)
 
 ## Features
 
 - **Floating overlay** — transparent, click-through window that stays on top. Toggle with `⌥ + Space` (fallback: `Cmd+Shift+K`).
-- **Multi-tab sessions** — each tab spawns its own `openclaw -p` process with independent session state.
+- **Multi-tab sessions** — each tab runs its own OpenClaw TUI session with independent state.
 - **Permission approval UI** — intercepts tool calls via PreToolUse HTTP hooks so you can review and approve/deny from the UI.
 - **Conversation history** — browse and resume past OpenClaw sessions.
 - **Skills marketplace** — install plugins from Anthropic's GitHub repos without leaving OpenClaw UI.
@@ -23,17 +25,24 @@ A lightweight, transparent desktop overlay for OpenClaw on macOS. This fork focu
 ## How It Works
 
 ```
-UI prompt → Main process spawns openclaw -p → NDJSON stream → live render
-                                         → tool call? → permission UI → approve/deny
+UI prompt → Main process spawns openclaw tui --message
+        → PTY stream parser → live render
+        → tool call? → permission UI → approve/deny
 ```
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full deep-dive.
 
-## Install App (Recommended)
+## Primary Install (One-Liner)
 
-The fastest way to get OpenClaw UI running as a regular Mac app. This installs dependencies, voice support (Whisper), builds the app, copies it to `/Applications`, and launches it.
+Remote one-liner installer (installs OpenClaw UI into `/Applications`):
 
-## One Command Deploy
+```bash
+curl -fsSL https://raw.githubusercontent.com/MuhammadDaudNasir/OpenClaw-UI/main/install.sh | bash
+```
+
+After install, users can launch **OpenClaw UI** directly from Applications/Spotlight without Terminal.
+
+## Local Deploy (Alternative)
 
 From repo root:
 
@@ -54,14 +63,6 @@ Other deploy modes:
 # Setup/build only, don't auto-run
 ./deploy.command --no-run
 ```
-
-Remote one-liner installer (installs app into `/Applications`):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/MuhammadDaudNasir/OpenClaw-UI/main/install.sh | bash
-```
-
-After install, users can launch **OpenClaw UI** directly from Applications/Spotlight without Terminal.
 
 **1) Clone the repo**
 
@@ -144,7 +145,7 @@ Renderer changes update instantly. Main-process changes require restarting `npm 
 
 | Command | Purpose |
 |---------|---------|
-| `curl -fsSL https://raw.githubusercontent.com/MuhammadDaudNasir/OpenClaw-UI/main/install.sh \| bash` | One-liner remote install to `/Applications` |
+| `curl -fsSL https://raw.githubusercontent.com/MuhammadDaudNasir/OpenClaw-UI/main/install.sh | bash` | One-liner remote install to `/Applications` |
 | `./deploy.command` | One command deploy (setup + build + run) |
 | `./commands/bootstrap.command` | One-command setup/build (supports `--app` and `--run`) |
 | `./commands/deploy.command` | Deploy entrypoint (`--app`, `--no-run`) |
@@ -247,8 +248,8 @@ src/
 
 ### How It Works
 
-1. Each tab creates a `openclaw -p --output-format stream-json` subprocess.
-2. NDJSON events are parsed by `RunManager` and normalized by `EventNormalizer`.
+1. Each tab creates an `openclaw tui --message ... --session ...` process.
+2. PTY output is parsed and normalized into canonical UI events.
 3. `ControlPlane` manages tab lifecycle (connecting → idle → running → completed/failed/dead).
 4. Tool permission requests arrive via HTTP hooks to `PermissionServer` (localhost only).
 5. The renderer polls backend health every 1.5s and reconciles tab state.
@@ -291,7 +292,7 @@ npm run doctor
 
 - **macOS only** — transparent overlay, tray icon, and node-pty are macOS-specific. Windows/Linux support is not currently implemented.
 - **Requires OpenClaw CLI** — OpenClaw UI is a UI layer, not a standalone AI client. You need an authenticated `openclaw` CLI.
-- **Permission mode** — uses `--permission-mode default`. The PTY interactive transport is legacy and disabled by default.
+- **Permission mode** — OpenClaw runs through PTY/TUI transport so approvals and tool execution remain interactive.
 
 ## Credits
 

@@ -1,0 +1,22 @@
+<svg width="1400" height="420" viewBox="0 0 1400 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1400" height="420" fill="#090A10"/>
+
+  <g transform="translate(70 42)">
+    <rect x="0" y="0" width="336" height="336" rx="72" fill="#E24A4A"/>
+
+    <path d="M88 212C120 168 168 150 218 157C255 162 281 181 299 208" stroke="white" stroke-width="22" stroke-linecap="round"/>
+    <path d="M118 127L148 182" stroke="white" stroke-width="22" stroke-linecap="round"/>
+    <path d="M176 114L188 176" stroke="white" stroke-width="22" stroke-linecap="round"/>
+    <path d="M235 127L217 183" stroke="white" stroke-width="22" stroke-linecap="round"/>
+
+    <circle cx="126" cy="227" r="9" fill="white"/>
+    <circle cx="164" cy="210" r="9" fill="white"/>
+    <circle cx="202" cy="210" r="9" fill="white"/>
+    <circle cx="240" cy="227" r="9" fill="white"/>
+  </g>
+
+  <g transform="translate(470 122)">
+    <text x="0" y="94" fill="white" font-family="SF Pro Display, Inter, Segoe UI, Arial, sans-serif" font-size="92" font-weight="700" letter-spacing="0.6">OpenClaw UI</text>
+    <text x="2" y="154" fill="#9EA1B3" font-family="SF Pro Text, Inter, Segoe UI, Arial, sans-serif" font-size="34" font-weight="500">Desktop interface for OpenClaw</text>
+  </g>
+</svg>

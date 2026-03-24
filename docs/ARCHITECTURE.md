@@ -1,8 +1,8 @@
-# CLUI Architecture
+# OpenClaw UI Architecture
 
 ## Overview
 
-CLUI is an Electron desktop application that provides a graphical interface for Claude Code CLI. It spawns `claude -p` subprocesses, parses their NDJSON output, and presents conversations in a floating overlay window.
+OpenClaw UI is an Electron desktop application that provides a graphical interface for OpenClaw CLI. It spawns local CLI subprocesses, parses their NDJSON output, and presents conversations in a floating overlay window.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -30,7 +30,7 @@ CLUI is an Electron desktop application that provides a graphical interface for 
 │  │  ┌─────────────┐  ┌──────────────────┐               │    │
 │  │  │ RunManager   │  │ EventNormalizer  │               │    │
 │  │  │ Spawns       │  │ Raw stream-json  │               │    │
-│  │  │ claude -p    │──│ → canonical      │               │    │
+│  │  │ openclaw tui    │──│ → canonical      │               │    │
 │  │  │ per prompt   │  │   events         │               │    │
 │  │  └─────────────┘  └──────────────────┘               │    │
 │  └──────────────────────────────────────────────────────┘    │
@@ -42,7 +42,7 @@ CLUI is an Electron desktop application that provides a graphical interface for 
 │  └────────────────────┘  └────────────────────────────┘      │
 └──────────────────────────────────────────────────────────────┘
          │                              │
-    claude -p (NDJSON)          raw.githubusercontent.com
+    openclaw tui (NDJSON)          raw.githubusercontent.com
     (local subprocess)          (optional, cached)
 ```
 
@@ -59,20 +59,19 @@ Single authority for all tab and session lifecycle. Manages:
 - **Health reconciliation** — responds to renderer polls with tab status + process liveness.
 - **Session ID tracking** — maps Claude session IDs to tabs for permission routing.
 
-### RunManager (`claude/run-manager.ts`)
+### PtyRunManager (`claude/pty-run-manager.ts`)
 
-Spawns one `claude -p --output-format stream-json` process per prompt. Responsibilities:
+Spawns one `openclaw tui --message <prompt> --session <id>` process per prompt. Responsibilities:
 
 - Constructs CLI arguments (`--resume`, `--permission-mode`, `--settings`, `--add-dir`, etc.)
-- Reads NDJSON from stdout line-by-line via `StreamParser`.
-- Passes raw events to `EventNormalizer` for canonicalization.
+- Parses PTY output lines and normalizes them to canonical UI events.
 - Maintains stderr ring buffer (100 lines) for error diagnostics.
 - Cleans up process on cancel, tab close, or unexpected exit.
 - Removes `CLAUDECODE` from spawned environment to prevent credential leakage.
 
 ### EventNormalizer (`claude/event-normalizer.ts`)
 
-Maps raw Claude Code stream-json events to canonical `NormalizedEvent` types:
+Maps raw structured CLI events (legacy non-PTY path) to canonical `NormalizedEvent` types:
 
 | Raw Event | Normalized Event |
 |-----------|-----------------|
@@ -87,17 +86,17 @@ Maps raw Claude Code stream-json events to canonical `NormalizedEvent` types:
 
 ### PermissionServer (`hooks/permission-server.ts`)
 
-HTTP server that intercepts Claude Code tool calls via PreToolUse hooks:
+HTTP server that intercepts OpenClaw tool calls via PreToolUse hooks:
 
 1. ControlPlane starts PermissionServer on `127.0.0.1:19836`.
 2. `generateSettingsFile()` creates a temp JSON file with hook config pointing at the server.
-3. RunManager passes `--settings <path>` to each `claude -p` spawn.
+3. Transport manager passes `--settings <path>` to each OpenClaw run.
 4. When Claude wants to use a tool, the CLI POSTs to the hook URL.
 5. PermissionServer emits a `permission-request` event to ControlPlane.
 6. ControlPlane routes it to the correct tab via `_findTabBySessionId()`.
 7. Renderer shows a `PermissionCard` with Allow/Deny buttons.
 8. User decision flows back: IPC → ControlPlane → PermissionServer → HTTP response.
-9. Claude Code proceeds or skips the tool based on the response.
+9. OpenClaw proceeds or skips the tool based on the response.
 
 Security: per-launch app secret, per-run tokens, sensitive field masking, 5-minute auto-deny timeout.
 
@@ -152,7 +151,7 @@ Theme mode state machine: `system | light | dark` with separate `_systemIsDark` 
 
 ## IPC Channel Map
 
-All channels are defined in `src/shared/types.ts` under the `IPC` const. Events flow through a single `clui:normalized-event` channel for all Claude Code stream events, with separate channels for tab status changes and enriched errors.
+All channels are defined in `src/shared/types.ts` under the `IPC` const. Events flow through a single `clui:normalized-event` channel for all OpenClaw stream events, with separate channels for tab status changes and enriched errors.
 
 ## Data Flow: Prompt → Response
 
@@ -161,10 +160,9 @@ User types prompt
     → InputBar calls window.clui.prompt(tabId, requestId, options)
     → ipcRenderer.invoke('clui:prompt', ...)
     → Main: ControlPlane.prompt()
-    → RunManager spawns: claude -p --output-format stream-json --resume <sid>
-    → Claude CLI writes NDJSON to stdout
-    → StreamParser emits lines
-    → EventNormalizer maps to NormalizedEvent
+    → PtyRunManager spawns: openclaw tui --message <prompt> --session <sid>
+    → OpenClaw TUI writes PTY output
+    → PTY parser maps to NormalizedEvent
     → ControlPlane updates tab state + broadcasts via IPC
     → Renderer: useClaudeEvents hook receives events
     → sessionStore.handleNormalizedEvent() updates messages

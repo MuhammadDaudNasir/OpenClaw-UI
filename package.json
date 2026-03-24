@@ -45,7 +45,7 @@
       "package.json"
     ],
     "mac": {
-      "icon": "resources/icon.icns",
+      "icon": "resources/icon.png",
       "entitlements": "resources/entitlements.mac.plist",
       "entitlementsInherit": "resources/entitlements.mac.plist",
       "extendInfo": {

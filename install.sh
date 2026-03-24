@@ -6,22 +6,29 @@ if [[ "$(uname)" != "Darwin" ]]; then
   exit 1
 fi
 
-if ! command -v git >/dev/null 2>&1; then
-  echo "git is required. Install Xcode Command Line Tools first:"
-  echo "  xcode-select --install"
-  exit 1
-fi
-
 if ! command -v bash >/dev/null 2>&1; then
   echo "bash is required."
   exit 1
 fi
 
-REPO_URL="${OPENCLAW_UI_REPO:-https://github.com/MuhammadDaudNasir/OpenClaw-UI.git}"
+if ! command -v curl >/dev/null 2>&1; then
+  echo "curl is required."
+  exit 1
+fi
+
+if ! command -v tar >/dev/null 2>&1; then
+  echo "tar is required."
+  exit 1
+fi
+
+REPO_SLUG="${OPENCLAW_UI_REPO_SLUG:-MuhammadDaudNasir/OpenClaw-UI}"
+REPO_REF="${OPENCLAW_UI_REF:-main}"
+ARCHIVE_URL="https://codeload.github.com/${REPO_SLUG}/tar.gz/refs/heads/${REPO_REF}"
 WORK_DIR="$(mktemp -d /tmp/openclaw-ui-install.XXXXXX)"
 
 echo "OpenClaw UI One-Command Installer"
-echo "Repository: $REPO_URL"
+echo "Repository: https://github.com/${REPO_SLUG}"
+echo "Ref: $REPO_REF"
 echo "Working dir: $WORK_DIR"
 echo
 
@@ -30,7 +37,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-git clone --depth 1 "$REPO_URL" "$WORK_DIR/repo"
+echo "Downloading source archive..."
+curl -fsSL "$ARCHIVE_URL" -o "$WORK_DIR/repo.tar.gz"
+mkdir -p "$WORK_DIR/repo"
+tar -xzf "$WORK_DIR/repo.tar.gz" -C "$WORK_DIR/repo" --strip-components=1
 cd "$WORK_DIR/repo"
 
 ./deploy.command --app

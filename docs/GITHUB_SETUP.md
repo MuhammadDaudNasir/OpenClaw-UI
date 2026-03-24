@@ -54,4 +54,3 @@ Expected:
 
 - `origin` -> your GitHub repo
 - `upstream` -> original repo (if you added it)
-

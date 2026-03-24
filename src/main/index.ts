@@ -24,8 +24,8 @@ let tray: Tray | null = null
 let screenshotCounter = 0
 let toggleSequence = 0
 
-// Feature flag: PTY transport is now default for OpenClaw compatibility.
-// Set CLUI_INTERACTIVE_PERMISSIONS_PTY=0 to force legacy non-PTY transport.
+// Feature flag: PTY transport default.
+// Note: if CLI is OpenClaw, PTY is forced regardless of this flag.
 const INTERACTIVE_PTY = process.env.CLUI_INTERACTIVE_PERMISSIONS_PTY !== '0'
 
 const controlPlane = new ControlPlane(INTERACTIVE_PTY)
@@ -149,7 +149,7 @@ function createWindow(): void {
     roundedCorners: true,
     backgroundColor: '#00000000',
     show: false,
-    icon: join(__dirname, '../../resources/icon.icns'),
+    icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -1267,6 +1267,8 @@ app.whenReady().then(async () => {
   // without deactivating the currently active app (hover preserved in browsers).
   // This is how Spotlight, Alfred, Raycast work.
   if (process.platform === 'darwin' && app.dock) {
+    const dockIcon = nativeImage.createFromPath(join(__dirname, '../../resources/icon.png'))
+    if (!dockIcon.isEmpty()) app.dock.setIcon(dockIcon)
     app.dock.hide()
   }
 
@@ -1328,9 +1330,9 @@ app.whenReady().then(async () => {
     broadcast('clui:shortcut-action', 'open-settings')
   })
 
-  const trayIconPath = join(__dirname, '../../resources/trayTemplate.png')
-  const trayIcon = nativeImage.createFromPath(trayIconPath)
-  trayIcon.setTemplateImage(true)
+  const trayIconPath = join(__dirname, '../../resources/icon.png')
+  const trayIcon = nativeImage.createFromPath(trayIconPath).resize({ width: 18, height: 18 })
+  trayIcon.setTemplateImage(false)
   tray = new Tray(trayIcon)
   tray.setToolTip('OpenClaw UI')
   tray.on('click', () => toggleWindow('tray click'))

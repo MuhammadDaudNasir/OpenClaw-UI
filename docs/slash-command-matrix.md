@@ -6,7 +6,7 @@ Test session: 450d2d0f-4b03-4761-8ecd-8d179998127d
 ## Protocol Finding
 
 `--input-format stream-json` is **completely broken** in CLI 2.1.63 (hangs forever, 0 events).
-The only working mode is one-shot `claude -p` with stdin closed + `--resume` for multi-turn.
+The only working mode is one-shot `openclaw tui` with stdin closed + `--resume` for multi-turn.
 
 ## Command Matrix
 
@@ -118,5 +118,5 @@ Unknown skill: permissions
 - Is error: false
 - Result text:
 ```
-You are currently using your subscription to power your Claude Code usage
+You are currently using your subscription to power your OpenClaw usage
 ```

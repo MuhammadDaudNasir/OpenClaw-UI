@@ -1,11 +1,11 @@
-# Agent Guide — Clui CC
+# Agent Guide — OpenClaw UI
 
-> This file is optimized for AI coding agents (Claude Code, Cursor, Copilot, etc.).
+> This file is optimized for AI coding agents (OpenClaw, Cursor, Copilot, etc.).
 > For human-readable docs see [ARCHITECTURE.md](ARCHITECTURE.md) and [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## What This Project Is
 
-Clui CC is a **macOS-only Electron overlay** that wraps the Claude Code CLI (`claude -p --output-format stream-json`) in a floating pill UI. It is NOT a web app, NOT a VS Code extension, and does NOT call the Anthropic API directly — it spawns CLI subprocesses.
+OpenClaw UI is a **macOS-only Electron overlay** that wraps the OpenClaw CLI in a floating pill UI. It is NOT a web app and NOT a VS Code extension — it spawns local CLI subprocesses.
 
 ## Quick Reference
 
@@ -26,7 +26,7 @@ Renderer (React 19 + Zustand 5 + Tailwind CSS 4)
     ↕  contextBridge IPC (src/preload/index.ts)
 Main Process (Node.js / Electron 33)
     ↕  spawns subprocess
-Claude Code CLI (claude -p --output-format stream-json)
+OpenClaw CLI (openclaw tui --message ... --session ...)
 ```
 
 ### Layer Responsibilities
@@ -42,7 +42,7 @@ Claude Code CLI (claude -p --output-format stream-json)
 | Concern | File(s) |
 |---------|---------|
 | Tab lifecycle & state machine | `src/main/claude/control-plane.ts` |
-| Spawning Claude CLI processes | `src/main/claude/run-manager.ts` |
+| Spawning OpenClaw PTY sessions | `src/main/claude/pty-run-manager.ts` |
 | Raw NDJSON → canonical events | `src/main/claude/event-normalizer.ts` |
 | Permission hook server | `src/main/hooks/permission-server.ts` |
 | All TypeScript types & IPC channels | `src/shared/types.ts` |
@@ -58,9 +58,8 @@ Claude Code CLI (claude -p --output-format stream-json)
 InputBar.tsx → window.clui.prompt(tabId, requestId, opts)
   → ipcRenderer.invoke('clui:prompt')
   → ControlPlane.prompt()
-  → RunManager spawns: claude -p --output-format stream-json --resume <sid>
-  → stdout emits NDJSON lines
-  → EventNormalizer → NormalizedEvent
+  → PtyRunManager spawns: openclaw tui --message <prompt> --session <sid>
+  → PTY output parser → NormalizedEvent
   → ControlPlane broadcasts via IPC
   → useClaudeEvents hook → sessionStore.handleNormalizedEvent()
   → React re-renders
@@ -101,7 +100,7 @@ All IPC and event types live in `src/shared/types.ts`. Key types:
 
 - Don't import main-process modules from renderer (or vice versa) — the preload bridge is the only crossing point
 - Don't add network calls — the app is designed to be nearly offline (only marketplace fetches from GitHub)
-- Don't use `node-pty` for new features — it's legacy, prefer `RunManager` (stdio-based)
+- Don't bypass `PtyRunManager` for OpenClaw flows — OpenClaw requires PTY/TUI transport
 - Don't add Electron `remote` module usage — it's disabled for security
 
 ## Adding a New Feature — Checklist
@@ -141,7 +140,7 @@ All IPC and event types live in `src/shared/types.ts`. Key types:
 | Animation | Framer Motion | 12 |
 | Icons | Phosphor Icons | 2 |
 | Markdown | react-markdown + remark-gfm | 9 / 4 |
-| PTY (legacy) | node-pty | 1.1 |
+| PTY transport | node-pty | 1.1 |
 
 ## Network Surface
 

@@ -1,14 +1,14 @@
-# Contributing to Clui CC
+# Contributing to OpenClaw UI
 
-Thanks for your interest in contributing! Clui CC is a desktop overlay for Claude Code, and we welcome bug reports, feature ideas, and pull requests.
+Thanks for your interest in contributing! OpenClaw UI is a desktop overlay for OpenClaw, and we welcome bug reports, feature ideas, and pull requests.
 
 ## Getting Started
 
-1. Make sure you have the [prerequisites](README.md#prerequisites) installed (macOS, Xcode CLT, Node.js 18+, Claude Code CLI 2.1+)
+1. Make sure you have the prerequisites installed (macOS, Xcode CLT, Node.js 18+, OpenClaw CLI)
 2. Fork and clone the repo:
    ```bash
-   git clone https://github.com/<your-username>/clui-cc.git
-   cd clui-cc
+   git clone https://github.com/<your-username>/OpenClaw-UI.git
+   cd OpenClaw-UI
    ```
 3. Check your environment (optional but recommended):
    ```bash
@@ -55,7 +55,7 @@ Thanks for your interest in contributing! Clui CC is a desktop overlay for Claud
 Open an issue with:
 - macOS version
 - Node.js version (`node --version`)
-- Claude Code CLI version (`claude --version`)
+- OpenClaw CLI version (`openclaw --version`)
 - Steps to reproduce
 - Expected vs. actual behavior
 

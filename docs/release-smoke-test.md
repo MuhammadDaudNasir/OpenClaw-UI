@@ -5,8 +5,8 @@
 ### Fresh Clone Bootstrap
 
 ```bash
-git clone https://github.com/lcoutodemos/clui-cc.git
-cd clui-cc
+git clone https://github.com/MuhammadDaudNasir/OpenClaw-UI.git
+cd OpenClaw-UI
 npm run doctor     # verify environment — all checks should pass
 npm install        # installs deps + runs postinstall (electron-builder install-app-deps + icon patch)
 npm run build      # production build — must exit 0 with no errors
@@ -18,8 +18,8 @@ npm run build      # production build — must exit 0 with no errors
 - macOS SDK available (`xcrun --sdk macosx --show-sdk-path` returns a path)
 - clang++ available with working C++ headers
 - `node --version` returns 18+
-- `python3` available with `distutils` importable
-- `claude --version` returns 2.1+
+- `python3` available (setuptools recommended for native rebuild environments)
+- `openclaw --version` returns a valid version
 
 **Expected output:**
 - `dist/main/index.js` — ~117 KB
@@ -39,7 +39,7 @@ npm run build      # production build — must exit 0 with no errors
 - [ ] macOS 13+
 - [ ] Xcode Command Line Tools installed (`xcode-select -p` returns a path)
 - [ ] Node.js 18+
-- [ ] `claude` CLI installed and authenticated (`claude --version` returns 2.1+)
+- [ ] `openclaw` CLI installed and authenticated
 
 ### Startup
 - [ ] `npm run dev` or `./commands/start.command` launches the app
@@ -63,7 +63,7 @@ npm run build      # production build — must exit 0 with no errors
 - [ ] Cost/tokens shown in status bar
 
 ### Permission System
-- [ ] When Claude tries to use a tool, a permission card appears
+- [ ] When OpenClaw tries to use a tool, a permission card appears
 - [ ] "Allow" lets the tool run
 - [ ] "Deny" blocks the tool
 - [ ] Permission denial is reflected in task completion

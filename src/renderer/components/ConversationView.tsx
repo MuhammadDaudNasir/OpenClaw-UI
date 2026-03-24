@@ -166,7 +166,7 @@ export function ConversationView() {
           </div>
         )}
 
-        <div className="space-y-1 relative">
+        <div className="space-y-2 relative">
           {grouped.map((item, idx) => {
             const msgIndex = startIndex + idx
             const isHistorical = msgIndex < historicalThreshold
@@ -390,16 +390,21 @@ function InterruptButton({ tabId }: { tabId: string }) {
 function UserMessage({ message, skipMotion }: { message: Message; skipMotion?: boolean }) {
   const colors = useColors()
   const content = (
-    <div
-      className="text-[13px] leading-[1.5] px-3 py-1.5 max-w-[85%]"
-      style={{
-        background: colors.userBubble,
-        color: colors.userBubbleText,
-        border: `1px solid ${colors.userBubbleBorder}`,
-        borderRadius: '14px 14px 4px 14px',
-      }}
-    >
-      {message.content}
+    <div className="max-w-[88%] flex flex-col items-end gap-1">
+      <div className="text-[10px] uppercase tracking-[0.08em] font-semibold" style={{ color: colors.textTertiary }}>
+        You
+      </div>
+      <div
+        className="text-[13px] leading-[1.5] px-3 py-1.5"
+        style={{
+          background: colors.userBubble,
+          color: colors.userBubbleText,
+          border: `1px solid ${colors.userBubbleBorder}`,
+          borderRadius: '14px 14px 4px 14px',
+        }}
+      >
+        {message.content}
+      </div>
     </div>
   )
 
@@ -583,11 +588,19 @@ const AssistantMessage = React.memo(function AssistantMessage({
   }), [colors])
 
   const inner = (
-    <div className="group/msg relative">
-      <div className="text-[13px] leading-[1.6] prose-cloud min-w-0 max-w-[92%]">
-        <Markdown remarkPlugins={REMARK_PLUGINS} components={markdownComponents}>
-          {message.content}
-        </Markdown>
+    <div className="group/msg relative max-w-[92%]">
+      <div className="text-[10px] uppercase tracking-[0.08em] font-semibold mb-1" style={{ color: colors.textTertiary }}>
+        OpenClaw
+      </div>
+      <div
+        className="rounded-xl px-3 py-2 border"
+        style={{ background: colors.surfacePrimary, borderColor: colors.toolBorder }}
+      >
+        <div className="text-[13px] leading-[1.6] prose-cloud min-w-0">
+          <Markdown remarkPlugins={REMARK_PLUGINS} components={markdownComponents}>
+            {message.content}
+          </Markdown>
+        </div>
       </div>
       {/* Copy button — always in DOM, shown via CSS :hover (no React state needed).
           Absolute positioning so it never shifts the text layout. */}

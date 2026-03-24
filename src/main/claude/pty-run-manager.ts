@@ -273,6 +273,8 @@ export interface PtyRunHandle {
   quiescenceTimer: ReturnType<typeof setTimeout> | null
   /** Last PTY output timestamp */
   lastOutputAt: number
+  /** Last meaningful output timestamp (ignores OpenClaw status redraw noise) */
+  lastMeaningfulOutputAt: number
   /** Current prompt snippet used to detect the echoed user input */
   promptSnippet: string
   /** Whether we saw an echoed prompt for current request */
@@ -397,6 +399,7 @@ export class PtyRunManager extends EventEmitter {
       runCompleteEmitted: false,
       quiescenceTimer: null,
       lastOutputAt: Date.now(),
+      lastMeaningfulOutputAt: Date.now(),
       promptSnippet: options.prompt.trim().toLowerCase().slice(0, 24),
       sawPromptEcho: false,
       openclawTuiMode: isOpenclaw,
@@ -423,10 +426,6 @@ export class PtyRunManager extends EventEmitter {
     ptyProcess.onData((data: string) => {
       // Raw diagnostics
       this._ringPush(handle.rawOutputTail, data.substring(0, 500))
-
-      handle.lastOutputAt = Date.now()
-      if (handle.quiescenceTimer) clearTimeout(handle.quiescenceTimer)
-      handle.quiescenceTimer = setTimeout(() => this._checkQuiescenceCompletion(requestId, handle), QUIESCENCE_MS)
 
       // Ink/TUI uses \r to redraw the current line (cursor back to col 0).
       // PTY output commonly uses \r\r\n as line endings (Ink reset + newline).
@@ -520,7 +519,11 @@ export class PtyRunManager extends EventEmitter {
   private _processLine(requestId: string, handle: PtyRunHandle, rawLine: string): void {
     const cleaned = stripAnsi(rawLine).trim()
     if (cleaned.length === 0) return
-    if (handle.openclawTuiMode && isUiChrome(cleaned)) return
+    handle.lastOutputAt = Date.now()
+    const promptMarker = isInputPrompt(cleaned)
+    // In OpenClaw TUI mode, keep prompt markers so quiescence-complete can fire.
+    // Other chrome/status lines are still ignored.
+    if (handle.openclawTuiMode && isUiChrome(cleaned) && !promptMarker) return
 
     // Ignore terminal mode toggles and redraw control fragments.
     if (/^(?:\?[0-9;?]*[a-zA-Z])+$/i.test(cleaned)) return
@@ -530,6 +533,11 @@ export class PtyRunManager extends EventEmitter {
 
     // Push to rolling buffer
     this._ringPushBuffer(handle.ptyBuffer, cleaned)
+    if (!isUiChrome(cleaned) || promptMarker) {
+      handle.lastMeaningfulOutputAt = Date.now()
+      if (handle.quiescenceTimer) clearTimeout(handle.quiescenceTimer)
+      handle.quiescenceTimer = setTimeout(() => this._checkQuiescenceCompletion(requestId, handle), QUIESCENCE_MS)
+    }
 
     log(`PTY line [${requestId}]: ${cleaned.substring(0, 200)}`)
 
@@ -614,7 +622,7 @@ export class PtyRunManager extends EventEmitter {
   private _checkQuiescenceCompletion(requestId: string, handle: PtyRunHandle): void {
     if (!this.activeRuns.has(requestId)) return
     if (!handle.pastInit || handle.permissionPhase === 'waiting_user') return
-    if (Date.now() - handle.lastOutputAt < QUIESCENCE_MS - 50) return
+    if (Date.now() - handle.lastMeaningfulOutputAt < QUIESCENCE_MS - 50) return
 
     const lastLines = handle.ptyBuffer.slice(-3)
     const hasPromptMarker = lastLines.some((l) => isInputPrompt(l))

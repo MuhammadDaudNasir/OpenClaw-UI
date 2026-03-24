@@ -4,6 +4,7 @@ import { PtyRunManager } from './pty-run-manager'
 import { PermissionServer, maskSensitiveFields } from '../hooks/permission-server'
 import type { HookToolRequest, PermissionOption } from '../hooks/permission-server'
 import { log as _log } from '../logger'
+import { findCliBinary } from '../openclaw/runtime'
 import type {
   TabStatus,
   TabRegistryEntry,
@@ -78,7 +79,10 @@ export class ControlPlane extends EventEmitter {
 
   constructor(interactivePty = false) {
     super()
-    this.interactivePty = interactivePty
+    const cliBase = findCliBinary().split('/').pop() || ''
+    const isOpenclawCli = cliBase.includes('openclaw')
+    // OpenClaw does not support legacy -p stream-json flags, so PTY is mandatory.
+    this.interactivePty = isOpenclawCli ? true : interactivePty
     this.runManager = new RunManager()
     this.ptyRunManager = new PtyRunManager()
     this.permissionServer = new PermissionServer()
@@ -129,7 +133,7 @@ export class ControlPlane extends EventEmitter {
       this.emit('event', tabId, permEvent)
     })
 
-    log(`Interactive PTY transport: ${interactivePty ? 'ENABLED' : 'disabled'}`)
+    log(`Interactive PTY transport: ${this.interactivePty ? 'ENABLED' : 'disabled'}`)
 
     // ─── Wire PtyRunManager events → ControlPlane routing ───
     this._wirePtyEvents()
