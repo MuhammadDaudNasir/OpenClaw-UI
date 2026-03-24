@@ -1,6 +1,8 @@
 # OpenClaw UI
 
 A lightweight, transparent desktop overlay for OpenClaw on macOS. This fork focuses on one-command deploy, app-style installation, and OpenClaw-first onboarding/control workflows.
+  
+> Attribution: this project is a fork of [lcoutodemos/clui-cc](https://github.com/lcoutodemos/clui-cc), with original foundation by [lcoutodemos](https://github.com/lcoutodemos).
 
 ![OpenClaw UI Banner](resources/openclaw-ui-banner.svg)
 
@@ -297,7 +299,8 @@ npm run doctor
 ## Credits
 
 - Fork and active development: [Muhammad Daud Nasir](https://github.com/MuhammadDaudNasir)
-- Original project and foundation: [lcoutodemos](https://github.com/lcoutodemos) ([clui-cc](https://github.com/lcoutodemos/clui-cc))
+- Original project and core foundation: [lcoutodemos](https://github.com/lcoutodemos) ([clui-cc](https://github.com/lcoutodemos/clui-cc))
+- This fork keeps explicit attribution in docs and UI.
 
 ## License
 

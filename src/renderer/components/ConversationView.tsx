@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import {
   FileText, PencilSimple, FileArrowUp, Terminal, MagnifyingGlass, Globe,
   Robot, Question, Wrench, FolderOpen, Copy, Check, CaretRight, CaretDown,
-  SpinnerGap, ArrowCounterClockwise, Square,
+  SpinnerGap, ArrowCounterClockwise, Square, ClipboardText,
 } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
 import { PermissionCard } from './PermissionCard'
@@ -65,6 +65,9 @@ export function ConversationView() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [hovered, setHovered] = useState(false)
   const [renderOffset, setRenderOffset] = useState(0) // 0 = show from tail
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchIndex, setSearchIndex] = useState(0)
+  const [searchToast, setSearchToast] = useState<string | null>(null)
   const isNearBottomRef = useRef(true)
   const prevTabIdRef = useRef(activeTabId)
   const colors = useColors()
@@ -112,14 +115,73 @@ export function ConversationView() {
     () => groupMessages(visibleMessages),
     [visibleMessages],
   )
+  const normalizedQuery = searchQuery.trim().toLowerCase()
+  const searchableIds = useMemo(
+    () => (
+      normalizedQuery
+        ? allMessages
+          .filter((m) => (m.role === 'user' || m.role === 'assistant' || m.role === 'system') && m.content.toLowerCase().includes(normalizedQuery))
+          .map((m) => m.id)
+        : []
+    ),
+    [allMessages, normalizedQuery],
+  )
+  const activeSearchId = searchableIds.length > 0
+    ? searchableIds[Math.min(searchIndex, searchableIds.length - 1)]
+    : null
 
   const hiddenCount = totalCount - visibleMessages.length
 
   const handleLoadOlder = useCallback(() => {
     setRenderOffset((o) => o + 1)
   }, [])
+  const jumpSearch = useCallback((dir: 1 | -1) => {
+    if (searchableIds.length === 0) return
+    setSearchIndex((i) => {
+      const next = (i + dir + searchableIds.length) % searchableIds.length
+      return next
+    })
+  }, [searchableIds.length])
+  const copyConversation = useCallback(async (format: 'md' | 'json') => {
+    if (!tab) return
+    const base = tab.messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp,
+      toolName: m.toolName || null,
+      toolStatus: m.toolStatus || null,
+    }))
+    try {
+      if (format === 'json') {
+        await navigator.clipboard.writeText(JSON.stringify(base, null, 2))
+        setSearchToast('Copied conversation JSON')
+      } else {
+        const md = base.map((m) => {
+          const who = m.role === 'assistant' ? 'OpenClaw' : m.role === 'user' ? 'You' : 'System'
+          const head = `### ${who}${m.toolName ? ` (${m.toolName}${m.toolStatus ? ` · ${m.toolStatus}` : ''})` : ''}`
+          return `${head}\n\n${m.content || '_empty_'}`
+        }).join('\n\n')
+        await navigator.clipboard.writeText(md)
+        setSearchToast('Copied conversation Markdown')
+      }
+      setTimeout(() => setSearchToast(null), 1400)
+    } catch {
+      setSearchToast('Copy failed')
+      setTimeout(() => setSearchToast(null), 1400)
+    }
+  }, [tab])
 
   if (!tab) return null
+
+  useEffect(() => {
+    setSearchIndex(0)
+  }, [normalizedQuery, activeTabId])
+
+  useEffect(() => {
+    if (!activeSearchId || !scrollRef.current) return
+    const node = scrollRef.current.querySelector(`[data-msg-id="${activeSearchId}"]`) as HTMLElement | null
+    if (node) node.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [activeSearchId])
 
   const isRunning = tab.status === 'running' || tab.status === 'connecting'
   const isDead = tab.status === 'dead'
@@ -153,6 +215,62 @@ export function ConversationView() {
         style={{ maxHeight: expandedUI ? 460 : 336, paddingBottom: 28 }}
         onScroll={handleScroll}
       >
+        <div
+          className="mb-2 flex items-center gap-1.5"
+          style={{ position: 'sticky', top: 0, zIndex: 3, background: colors.containerBg, paddingBottom: 4 }}
+        >
+          <div
+            className="flex items-center gap-1 rounded-md px-2 py-1 flex-1"
+            style={{ border: `1px solid ${colors.containerBorder}`, background: colors.surfacePrimary }}
+          >
+            <MagnifyingGlass size={12} style={{ color: colors.textTertiary }} />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search chat..."
+              className="w-full bg-transparent outline-none text-[11px]"
+              style={{ color: colors.textPrimary }}
+            />
+            <span className="text-[10px]" style={{ color: colors.textTertiary }}>
+              {searchableIds.length > 0 ? `${Math.min(searchIndex + 1, searchableIds.length)}/${searchableIds.length}` : '0'}
+            </span>
+          </div>
+          <button
+            onClick={() => jumpSearch(-1)}
+            className="text-[10px] px-2 py-1 rounded-md"
+            style={{ border: `1px solid ${colors.containerBorder}`, color: colors.textSecondary, background: colors.surfacePrimary }}
+            title="Previous match"
+          >
+            Prev
+          </button>
+          <button
+            onClick={() => jumpSearch(1)}
+            className="text-[10px] px-2 py-1 rounded-md"
+            style={{ border: `1px solid ${colors.containerBorder}`, color: colors.textSecondary, background: colors.surfacePrimary }}
+            title="Next match"
+          >
+            Next
+          </button>
+          <button
+            onClick={() => { void copyConversation('md') }}
+            className="text-[10px] px-2 py-1 rounded-md inline-flex items-center gap-1"
+            style={{ border: `1px solid ${colors.containerBorder}`, color: colors.textSecondary, background: colors.surfacePrimary }}
+            title="Copy conversation as Markdown"
+          >
+            <ClipboardText size={11} />
+            MD
+          </button>
+          <button
+            onClick={() => { void copyConversation('json') }}
+            className="text-[10px] px-2 py-1 rounded-md inline-flex items-center gap-1"
+            style={{ border: `1px solid ${colors.containerBorder}`, color: colors.textSecondary, background: colors.surfacePrimary }}
+            title="Copy conversation as JSON"
+          >
+            <ClipboardText size={11} />
+            JSON
+          </button>
+        </div>
+
         {/* Load older button */}
         {hasOlder && (
           <div className="flex justify-center py-2">
@@ -173,18 +291,35 @@ export function ConversationView() {
 
             switch (item.kind) {
               case 'user':
-                return <UserMessage key={item.message.id} message={item.message} skipMotion={isHistorical} />
+                return (
+                  <div key={item.message.id} data-msg-id={item.message.id}>
+                    <UserMessage message={item.message} skipMotion={isHistorical} isSearchHit={item.message.id === activeSearchId} />
+                  </div>
+                )
               case 'assistant':
-                return <AssistantMessage key={item.message.id} message={item.message} skipMotion={isHistorical} />
+                return (
+                  <div key={item.message.id} data-msg-id={item.message.id}>
+                    <AssistantMessage message={item.message} skipMotion={isHistorical} isSearchHit={item.message.id === activeSearchId} />
+                  </div>
+                )
               case 'tool-group':
                 return <ToolGroup key={`tg-${item.messages[0].id}`} tools={item.messages} skipMotion={isHistorical} />
               case 'system':
-                return <SystemMessage key={item.message.id} message={item.message} skipMotion={isHistorical} />
+                return (
+                  <div key={item.message.id} data-msg-id={item.message.id}>
+                    <SystemMessage message={item.message} skipMotion={isHistorical} isSearchHit={item.message.id === activeSearchId} />
+                  </div>
+                )
               default:
                 return null
             }
           })}
         </div>
+        {searchToast && (
+          <div className="mt-2 text-[10px]" style={{ color: colors.textTertiary }}>
+            {searchToast}
+          </div>
+        )}
 
         {/* Permission card (shows first item from queue) */}
         <AnimatePresence>
@@ -387,20 +522,38 @@ function InterruptButton({ tabId }: { tabId: string }) {
 
 // ─── User Message ───
 
-function UserMessage({ message, skipMotion }: { message: Message; skipMotion?: boolean }) {
+function UserMessage({
+  message,
+  skipMotion,
+  isSearchHit = false,
+}: {
+  message: Message
+  skipMotion?: boolean
+  isSearchHit?: boolean
+}) {
   const colors = useColors()
+  const sendMessage = useSessionStore((s) => s.sendMessage)
   const content = (
-    <div className="max-w-[88%] flex flex-col items-end gap-1">
+    <div className="max-w-[88%] flex flex-col items-end gap-1 relative group/user">
       <div className="text-[10px] uppercase tracking-[0.08em] font-semibold" style={{ color: colors.textTertiary }}>
         You
       </div>
+      <button
+        onClick={() => sendMessage(message.content)}
+        className="absolute -top-[2px] right-0 text-[10px] px-1.5 py-0.5 rounded-md opacity-0 group-hover/user:opacity-100 transition-opacity"
+        style={{ border: `1px solid ${colors.containerBorder}`, background: colors.surfacePrimary, color: colors.textSecondary }}
+        title="Resend this message"
+      >
+        Resend
+      </button>
       <div
         className="text-[13px] leading-[1.5] px-3 py-1.5"
         style={{
           background: colors.userBubble,
           color: colors.userBubbleText,
-          border: `1px solid ${colors.userBubbleBorder}`,
+          border: `1px solid ${isSearchHit ? colors.accent : colors.userBubbleBorder}`,
           borderRadius: '14px 14px 4px 14px',
+          boxShadow: isSearchHit ? `0 0 0 2px ${colors.accentLight}` : 'none',
         }}
       >
         {message.content}
@@ -564,9 +717,11 @@ function ImageCard({ src, alt, colors }: { src?: string; alt?: string; colors: R
 const AssistantMessage = React.memo(function AssistantMessage({
   message,
   skipMotion,
+  isSearchHit = false,
 }: {
   message: Message
   skipMotion?: boolean
+  isSearchHit?: boolean
 }) {
   const colors = useColors()
 
@@ -594,7 +749,11 @@ const AssistantMessage = React.memo(function AssistantMessage({
       </div>
       <div
         className="rounded-xl px-3 py-2 border"
-        style={{ background: colors.surfacePrimary, borderColor: colors.toolBorder }}
+        style={{
+          background: colors.surfacePrimary,
+          borderColor: isSearchHit ? colors.accent : colors.toolBorder,
+          boxShadow: isSearchHit ? `0 0 0 2px ${colors.accentLight}` : 'none',
+        }}
       >
         <div className="text-[13px] leading-[1.6] prose-cloud min-w-0">
           <Markdown remarkPlugins={REMARK_PLUGINS} components={markdownComponents}>
@@ -626,7 +785,10 @@ const AssistantMessage = React.memo(function AssistantMessage({
       {inner}
     </motion.div>
   )
-}, (prev, next) => prev.message.content === next.message.content && prev.skipMotion === next.skipMotion)
+}, (prev, next) =>
+  prev.message.content === next.message.content
+  && prev.skipMotion === next.skipMotion
+  && prev.isSearchHit === next.isSearchHit)
 
 // ─── Tool Group (collapsible timeline — Claude Code style) ───
 
@@ -804,7 +966,15 @@ function ToolGroup({ tools, skipMotion }: { tools: Message[]; skipMotion?: boole
 
 // ─── System Message ───
 
-function SystemMessage({ message, skipMotion }: { message: Message; skipMotion?: boolean }) {
+function SystemMessage({
+  message,
+  skipMotion,
+  isSearchHit = false,
+}: {
+  message: Message
+  skipMotion?: boolean
+  isSearchHit?: boolean
+}) {
   const isError = message.content.startsWith('Error:') || message.content.includes('unexpectedly')
   const colors = useColors()
 
@@ -814,6 +984,7 @@ function SystemMessage({ message, skipMotion }: { message: Message; skipMotion?:
       style={{
         background: isError ? colors.statusErrorBg : colors.surfaceHover,
         color: isError ? colors.statusError : colors.textTertiary,
+        border: `1px solid ${isSearchHit ? colors.accent : 'transparent'}`,
       }}
     >
       {message.content}

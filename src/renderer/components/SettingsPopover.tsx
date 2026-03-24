@@ -329,6 +329,41 @@ export function SettingsPopover() {
                 )}
               </div>
 
+              <div
+                style={{
+                  border: `1px solid ${colors.containerBorder}`,
+                  borderRadius: 10,
+                  background: colors.surfacePrimary,
+                  padding: '8px 9px',
+                  marginBottom: 7,
+                }}
+              >
+                <div className="text-[10px] font-semibold" style={{ color: colors.textPrimary }}>
+                  Credits & Attribution
+                </div>
+                <div className="text-[10px]" style={{ color: colors.textTertiary, marginTop: 2, lineHeight: 1.45 }}>
+                  Original project foundation by lcoutodemos (clui-cc). This OpenClaw UI fork is maintained by Muhammad Daud Nasir.
+                </div>
+                <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={() => { void window.clui.openExternal('https://github.com/lcoutodemos/clui-cc') }}
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      padding: '4px 7px',
+                      borderRadius: 7,
+                      border: `1px solid ${colors.containerBorder}`,
+                      background: colors.surfaceHover,
+                      color: colors.textSecondary,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    Open Original Repo
+                  </button>
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                 <ActionBtn
                   colors={colors}
