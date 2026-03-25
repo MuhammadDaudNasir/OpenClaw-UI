@@ -261,6 +261,8 @@ export interface PtyRunHandle {
   permissionTimeout: ReturnType<typeof setTimeout> | null
   /** Accumulated text since last flush (for debounced text_chunk emission) */
   textAccumulator: string
+  /** Whether we've seen any non-chrome content for this run */
+  seenContent: boolean
   /** Whether we've seen the initial welcome/init output */
   pastInit: boolean
   /** Whether we've emitted session_init */
@@ -394,6 +396,7 @@ export class PtyRunManager extends EventEmitter {
       ptyBuffer: [],
       permissionTimeout: null,
       textAccumulator: '',
+      seenContent: false,
       pastInit: false,
       emittedSessionInit: false,
       selectorOptions: [],
@@ -648,6 +651,7 @@ export class PtyRunManager extends EventEmitter {
     }
     const textLine = cleaned.startsWith('⏺') ? cleaned.replace(/^⏺\s*/, '') : cleaned
     handle.textAccumulator += textLine
+    handle.seenContent = true
 
     // Emit text chunks periodically (debounce 50ms)
     this._scheduleTextFlush(requestId, handle)
@@ -660,7 +664,12 @@ export class PtyRunManager extends EventEmitter {
 
     const lastLines = handle.ptyBuffer.slice(-3)
     const hasPromptMarker = lastLines.some((l) => isInputPrompt(l))
-    if (!hasPromptMarker) return
+    const openclawSilence = handle.openclawTuiMode
+      && handle.seenContent
+      && !hasPromptMarker
+      && (Date.now() - handle.lastMeaningfulOutputAt >= QUIESCENCE_MS * 2)
+
+    if (!hasPromptMarker && !openclawSilence) return
 
     this._flushText(requestId, handle)
     if (!handle.runCompleteEmitted) {
