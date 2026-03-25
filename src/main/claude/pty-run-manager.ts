@@ -293,12 +293,29 @@ export class PtyRunManager extends EventEmitter {
   private activeRuns = new Map<string, PtyRunHandle>()
   private _finishedRuns = new Map<string, PtyRunHandle>()
   private claudeBinary: string
+  private recentLineSet = new Set<string>()
+  private recentLines: string[] = []
 
   constructor() {
     super()
     this.claudeBinary = findCliBinary()
     this._ensureSpawnHelperExecutable()
     log(`CLI binary: ${this.claudeBinary}`)
+  }
+
+  private _rememberLine(line: string): void {
+    if (!line) return
+    if (this.recentLineSet.has(line)) return
+    this.recentLineSet.add(line)
+    this.recentLines.push(line)
+    if (this.recentLines.length > 300) {
+      const drop = this.recentLines.shift()
+      if (drop) this.recentLineSet.delete(drop)
+    }
+  }
+
+  private _isDuplicateLine(line: string): boolean {
+    return this.recentLineSet.has(line)
   }
 
   /**
@@ -589,6 +606,9 @@ export class PtyRunManager extends EventEmitter {
         // non-chrome line after the prompt echo as the start of the response.
         if (isPromptEcho) {
           handle.sawPromptEcho = true
+          handle.textAccumulator = ''
+          handle.ptyBuffer = []
+          handle.seenContent = false
           return
         }
         if (handle.sawPromptEcho && !isUiChrome(cleaned)) {
@@ -644,6 +664,9 @@ export class PtyRunManager extends EventEmitter {
 
     // ─── Accumulate text output ───
     if (isUiChrome(cleaned)) return
+    if (handle.openclawTuiMode && handle.sawPromptEcho && this._isDuplicateLine(cleaned)) {
+      return
+    }
 
     // Accumulate text for debounced emission
     if (handle.textAccumulator.length > 0) {
@@ -652,6 +675,7 @@ export class PtyRunManager extends EventEmitter {
     const textLine = cleaned.startsWith('⏺') ? cleaned.replace(/^⏺\s*/, '') : cleaned
     handle.textAccumulator += textLine
     handle.seenContent = true
+    if (handle.openclawTuiMode) this._rememberLine(cleaned)
 
     // Emit text chunks periodically (debounce 50ms)
     this._scheduleTextFlush(requestId, handle)
