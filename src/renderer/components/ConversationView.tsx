@@ -866,7 +866,7 @@ const AssistantMessage = React.memo(function AssistantMessage({
   }
 
   const inner = (
-    <div className="group/msg relative max-w-[92%]">
+    <div className="group/msg relative inline-block w-fit max-w-[92%]">
       <div className="text-[10px] uppercase tracking-[0.08em] font-semibold mb-1" style={{ color: colors.textTertiary }}>
         OpenClaw
       </div>
