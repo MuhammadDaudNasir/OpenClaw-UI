@@ -122,14 +122,16 @@ fi
 
 step "Step 3/6 — Building ${APP_NAME}.app"
 
-if ! npm run dist; then
+# Installer builds are intentionally unsigned for reliability on local machines.
+# This avoids codesign identity ambiguity issues from duplicate certs in Keychain.
+if ! CSC_IDENTITY_AUTO_DISCOVERY=false npm run dist; then
   echo
   echo "Build failed."
   echo
   echo "  Try these steps one at a time:"
   echo "    rm -rf node_modules"
   echo "    npm install"
-  echo "    npm run dist"
+  echo "    CSC_IDENTITY_AUTO_DISCOVERY=false npm run dist"
   echo
   echo "  If it still fails, see docs/TROUBLESHOOTING.md"
   echo
