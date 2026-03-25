@@ -261,8 +261,8 @@ function isUiChrome(line: string): boolean {
  */
 function parseToolCallLine(line: string): { toolName: string; input: string } | null {
   // Pattern: emoji/spinner + tool name + optional input
-  const match = line.match(/(?:⏳|⏳|✓|✗|⚡|🔧|Running|Executing)\s+(\w+)\s*(.*)/i)
-    || line.match(/(?:Tool|Using):\s*(\w+)\s*(.*)/i)
+  const match = line.match(/^\s*(?:⏳|✓|✗|⚡|🔧|Running|Executing)\s+([A-Za-z_][\w-]*)\s*(.*)$/i)
+    || line.match(/^\s*(?:Tool|Using):\s*([A-Za-z_][\w-]*)\s*(.*)$/i)
   if (match) {
     return { toolName: match[1], input: match[2].trim() }
   }
