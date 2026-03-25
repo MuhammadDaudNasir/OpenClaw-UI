@@ -281,6 +281,8 @@ export interface PtyRunHandle {
   lastMeaningfulOutputAt: number
   /** Current prompt snippet used to detect the echoed user input */
   promptSnippet: string
+  /** Full prompt line (last non-empty line) for OpenClaw echo detection */
+  promptLine: string
   /** Whether we saw an echoed prompt for current request */
   sawPromptEcho: boolean
   /** OpenClaw native TUI mode (different output semantics) */
@@ -423,6 +425,10 @@ export class PtyRunManager extends EventEmitter {
       lastOutputAt: Date.now(),
       lastMeaningfulOutputAt: Date.now(),
       promptSnippet: options.prompt.trim().toLowerCase().slice(0, 24),
+      promptLine: (() => {
+        const lines = options.prompt.split('\n').map((l) => l.trim()).filter(Boolean)
+        return (lines[lines.length - 1] || options.prompt).trim()
+      })(),
       sawPromptEcho: false,
       openclawTuiMode: isOpenclaw,
     }
@@ -430,7 +436,6 @@ export class PtyRunManager extends EventEmitter {
     if (isOpenclaw) {
       handle.sessionId = options.sessionId || 'clui-main'
       handle.emittedSessionInit = true
-      handle.pastInit = true
       this.emit('normalized', requestId, {
         type: 'session_init',
         sessionId: handle.sessionId,
@@ -553,7 +558,7 @@ export class PtyRunManager extends EventEmitter {
    * Process a single line of PTY output.
    */
   private _processLine(requestId: string, handle: PtyRunHandle, rawLine: string): void {
-    const cleaned = stripAnsi(rawLine).trim()
+    let cleaned = stripAnsi(rawLine).trim()
     if (cleaned.length === 0) return
     handle.lastOutputAt = Date.now()
     const promptMarker = isInputPrompt(cleaned)
@@ -602,18 +607,24 @@ export class PtyRunManager extends EventEmitter {
         && cleaned.length <= handle.promptSnippet.length + 2
 
       if (handle.openclawTuiMode) {
-        // OpenClaw doesn't use the same "⏺" bullet, so treat the first real
-        // non-chrome line after the prompt echo as the start of the response.
-        if (isPromptEcho) {
+        const promptLine = handle.promptLine.trim()
+        const promptLower = promptLine.toLowerCase()
+        const cleanedLower = cleaned.toLowerCase()
+        const idx = promptLine ? cleanedLower.lastIndexOf(promptLower) : -1
+
+        if (idx !== -1) {
           handle.sawPromptEcho = true
           handle.textAccumulator = ''
           handle.ptyBuffer = []
           handle.seenContent = false
-          return
-        }
-        if (handle.sawPromptEcho && !isUiChrome(cleaned)) {
+
+          const after = cleaned.slice(idx + promptLine.length).trim()
+          if (!after) return
+          // Treat text after the last prompt echo as the actual response start.
+          cleaned = after
           handle.pastInit = true
         } else {
+          // Ignore all history until we see the current prompt echoed.
           return
         }
       } else {
