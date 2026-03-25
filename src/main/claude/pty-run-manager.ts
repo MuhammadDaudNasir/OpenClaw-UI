@@ -743,6 +743,17 @@ export class PtyRunManager extends EventEmitter {
       return
     }
 
+    // OpenClaw can redraw prompt/status before real answer text arrives.
+    // Do not complete early in that phase or the response is dropped.
+    if (handle.openclawTuiMode && !handle.seenContent) {
+      const waitedMs = Date.now() - handle.startedAt
+      if (waitedMs < 15000) {
+        if (handle.quiescenceTimer) clearTimeout(handle.quiescenceTimer)
+        handle.quiescenceTimer = setTimeout(() => this._checkQuiescenceCompletion(requestId, handle), QUIESCENCE_MS)
+        return
+      }
+    }
+
     const lastLines = handle.ptyBuffer.slice(-3)
     const hasPromptMarker = lastLines.some((l) => isInputPrompt(l))
     const openclawSilence = handle.openclawTuiMode
