@@ -773,25 +773,16 @@ export class PtyRunManager extends EventEmitter {
 
     const lastLines = handle.ptyBuffer.slice(-3)
     const hasPromptMarker = lastLines.some((l) => isInputPrompt(l))
-    const openclawSilence = handle.openclawTuiMode
-      && handle.seenContent
-      && !hasPromptMarker
-      && (Date.now() - handle.lastMeaningfulOutputAt >= QUIESCENCE_MS * 5)
-      && (Date.now() - handle.lastWorkingSignalAt >= QUIESCENCE_MS * 5)
 
-    if (!hasPromptMarker && !openclawSilence) {
-      // In OpenClaw TUI mode there may be no explicit prompt marker.
-      // Keep polling until silence threshold is reached, then complete.
-      if (handle.openclawTuiMode) {
-        // Prefer explicit idle marker before completing.
-        if (!handle.sawIdleMarker) {
-          if (handle.quiescenceTimer) clearTimeout(handle.quiescenceTimer)
-          handle.quiescenceTimer = setTimeout(() => this._checkQuiescenceCompletion(requestId, handle), QUIESCENCE_MS)
-          return
-        }
+    if (handle.openclawTuiMode) {
+      // OpenClaw completion is prompt-driven: only finish when TUI is explicitly
+      // back to ready/idle state, not just because of quiet output.
+      if (!hasPromptMarker && !handle.sawIdleMarker) {
         if (handle.quiescenceTimer) clearTimeout(handle.quiescenceTimer)
         handle.quiescenceTimer = setTimeout(() => this._checkQuiescenceCompletion(requestId, handle), QUIESCENCE_MS)
+        return
       }
+    } else if (!hasPromptMarker) {
       return
     }
 
