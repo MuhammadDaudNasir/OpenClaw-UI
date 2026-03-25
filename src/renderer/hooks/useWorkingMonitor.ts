@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { useSessionStore } from '../stores/sessionStore'
 
-const WORKING_STALE_MS = 4500
-const TIMER_INTERVAL_MS = 1200
+const WORKING_STALE_MS = 5000
+const TIMER_INTERVAL_MS = 1000
 
 export function useWorkingMonitor() {
   useEffect(() => {
@@ -11,13 +11,19 @@ export function useWorkingMonitor() {
       const now = Date.now()
       let mutated = false
       const freshTabs = tabs.map((tab) => {
-        if ((tab.status === 'running' || tab.status === 'connecting') && !tab.activeRequestId) {
-          if (now - (tab.lastEventAt || 0) > WORKING_STALE_MS) {
+        if (tab.status === 'running' || tab.status === 'connecting') {
+          const lastEventAge = now - (tab.lastEventAt || 0)
+          const hasRunningTool = tab.messages.some((m) => m.role === 'tool' && m.toolStatus === 'running')
+          const isStale = lastEventAge > WORKING_STALE_MS && !hasRunningTool
+
+          if (isStale) {
             mutated = true
             return {
               ...tab,
               status: 'completed' as const,
+              activeRequestId: null,
               currentActivity: '',
+              permissionQueue: [],
             }
           }
         }

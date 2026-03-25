@@ -52,6 +52,7 @@ export interface CluiAPI {
   }>
   openclawSetModel(provider: string, model: string): Promise<{ ok: boolean; error?: string }>
   openclawRun(action: string): Promise<{ ok: boolean; output: string; error?: string }>
+  getRuntimeMetrics(): Promise<{ cpuPercent: number; memoryMb: number; uptimeSec: number; timestamp: number }>
   setPermissionMode(mode: string): void
   getTheme(): Promise<{ isDark: boolean }>
   onThemeChange(callback: (isDark: boolean) => void): () => void
@@ -111,6 +112,7 @@ const api: CluiAPI = {
   openclawModelInfo: () => ipcRenderer.invoke(IPC.OPENCLAW_MODEL_INFO),
   openclawSetModel: (provider, model) => ipcRenderer.invoke(IPC.OPENCLAW_SET_MODEL, { provider, model }),
   openclawRun: (action) => ipcRenderer.invoke(IPC.OPENCLAW_RUN, { action }),
+  getRuntimeMetrics: () => ipcRenderer.invoke(IPC.GET_RUNTIME_METRICS),
   setPermissionMode: (mode) => ipcRenderer.send(IPC.SET_PERMISSION_MODE, mode),
   getTheme: () => ipcRenderer.invoke(IPC.GET_THEME),
   onThemeChange: (callback) => {

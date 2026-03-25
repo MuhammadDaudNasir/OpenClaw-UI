@@ -367,6 +367,7 @@ export const IPC = {
   OPENCLAW_MODEL_INFO: 'clui:openclaw-model-info',
   OPENCLAW_SET_MODEL: 'clui:openclaw-set-model',
   OPENCLAW_RUN: 'clui:openclaw-run',
+  GET_RUNTIME_METRICS: 'clui:get-runtime-metrics',
 
   // Permission mode
   SET_PERMISSION_MODE: 'clui:set-permission-mode',

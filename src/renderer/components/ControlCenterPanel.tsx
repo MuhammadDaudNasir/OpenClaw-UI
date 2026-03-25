@@ -15,6 +15,33 @@ function formatStatusText(text: string | null | undefined, maxLines = 5): string
     .join('\n')
 }
 
+type CommandEntry = { id: string; label: string; aliases: string[] }
+
+const COMMANDS: CommandEntry[] = [
+  { id: 'gateway_start', label: 'gateway start', aliases: ['start gateway', 'gateway up'] },
+  { id: 'gateway_stop', label: 'gateway stop', aliases: ['stop gateway', 'gateway down'] },
+  { id: 'channels_status', label: 'channels status', aliases: ['channel status', 'status channels'] },
+  { id: 'plugins_list', label: 'plugins list', aliases: ['list plugins'] },
+  { id: 'skills_list', label: 'skills list', aliases: ['list skills'] },
+  { id: 'update_check', label: 'update check', aliases: ['check update'] },
+  { id: 'update_upgrade', label: 'update upgrade', aliases: ['upgrade update', 'install update'] },
+]
+
+function nearestCommand(query: string): CommandEntry | null {
+  const needle = query.trim().toLowerCase()
+  if (!needle) return null
+  const scored = COMMANDS.map((cmd) => {
+    const fields = [cmd.label, ...cmd.aliases]
+    const starts = fields.some((f) => f.startsWith(needle))
+    const includes = fields.some((f) => f.includes(needle))
+    const score = starts ? 3 : includes ? 2 : 0
+    return { cmd, score }
+  }).filter((s) => s.score > 0)
+  if (scored.length === 0) return null
+  scored.sort((a, b) => b.score - a.score)
+  return scored[0].cmd
+}
+
 export function ControlCenterPanel() {
   const colors = useColors()
   const tab = useSessionStore((s) => s.controlCenterTab)
@@ -67,17 +94,112 @@ function AgentsTab() {
   const staticInfo = useSessionStore((s) => s.staticInfo)
   const [output, setOutput] = useState<string>('')
   const [busy, setBusy] = useState(false)
+  const [logs, setLogs] = useState<string[]>([])
+  const [cpuPercent, setCpuPercent] = useState(0)
+  const [memoryMb, setMemoryMb] = useState(0)
+  const [activeTasks, setActiveTasks] = useState(0)
+  const [failedTasks, setFailedTasks] = useState(0)
+  const [cmdInput, setCmdInput] = useState('')
+  const [history, setHistory] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('openclaw-command-history')
+      if (!raw) return []
+      const arr = JSON.parse(raw)
+      return Array.isArray(arr) ? arr.filter((v) => typeof v === 'string') : []
+    } catch {
+      return []
+    }
+  })
+
+  const appendLog = (line: string) => {
+    const stamp = new Date().toLocaleTimeString()
+    setLogs((prev) => [`[${stamp}] ${line}`, ...prev].slice(0, 120))
+  }
+
+  const suggestions = (() => {
+    const q = cmdInput.trim().toLowerCase()
+    if (!q) return []
+    return COMMANDS
+      .filter((cmd) => [cmd.label, ...cmd.aliases].some((f) => f.includes(q)))
+      .slice(0, 6)
+  })()
 
   const run = async (action: string) => {
     setBusy(true)
     const res = await window.clui.openclawRun(action)
-    if (res.ok) setOutput(res.output || 'Done')
-    else setOutput(`${res.error || 'Failed'}\n${res.output || ''}`.trim())
+    if (res.ok) {
+      setOutput(res.output || 'Done')
+      appendLog(`${action} succeeded`)
+    } else {
+      setOutput(`${res.error || 'Failed'}\n${res.output || ''}`.trim())
+      appendLog(`${action} failed`)
+    }
     setBusy(false)
   }
 
+  const runByInput = async () => {
+    const typed = cmdInput.trim()
+    if (!typed) return
+    const direct = COMMANDS.find((c) => c.label === typed.toLowerCase())
+    const suggested = direct || nearestCommand(typed)
+    if (!suggested) {
+      appendLog(`Unknown command: "${typed}"`)
+      return
+    }
+    if (!direct && suggested) {
+      appendLog(`Auto-corrected "${typed}" -> "${suggested.label}"`)
+    }
+    const nextHistory = [suggested.label, ...history.filter((h) => h !== suggested.label)].slice(0, 12)
+    setHistory(nextHistory)
+    localStorage.setItem('openclaw-command-history', JSON.stringify(nextHistory))
+    setCmdInput('')
+    await run(suggested.id)
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const [metrics, health] = await Promise.all([
+          window.clui.getRuntimeMetrics(),
+          window.clui.tabHealth(),
+        ])
+        if (cancelled) return
+        setCpuPercent(metrics.cpuPercent || 0)
+        setMemoryMb(metrics.memoryMb || 0)
+        const tasks = Array.isArray(health?.tabs)
+          ? health.tabs.filter((t: any) => t.alive || t.status === 'running' || t.status === 'connecting')
+          : []
+        const failed = Array.isArray(health?.tabs)
+          ? health.tabs.filter((t: any) => t.status === 'failed' || t.status === 'dead').length
+          : 0
+        setActiveTasks(tasks.length)
+        setFailedTasks(failed)
+      } catch {
+        if (!cancelled) appendLog('Live monitor poll failed')
+      }
+    }
+    const timer = setInterval(() => { void poll() }, 1000)
+    void poll()
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [])
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <Card title="Live Monitor" colors={colors}>
+        <div style={{ display: 'grid', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: colors.textSecondary }}>
+            <span style={{ width: 8, height: 8, borderRadius: 99, background: failedTasks > 0 ? '#ef4444' : activeTasks > 0 ? '#f59e0b' : '#22c55e', boxShadow: `0 0 10px ${failedTasks > 0 ? 'rgba(239,68,68,0.4)' : activeTasks > 0 ? 'rgba(245,158,11,0.4)' : 'rgba(34,197,94,0.35)'}` }} />
+            {failedTasks > 0 ? 'Degraded' : activeTasks > 0 ? 'Busy' : 'Healthy'}
+          </div>
+          <div style={{ fontSize: 11, color: colors.textSecondary }}>CPU: {cpuPercent}%</div>
+          <div style={{ fontSize: 11, color: colors.textSecondary }}>RAM: {memoryMb} MB</div>
+          <div style={{ fontSize: 11, color: colors.textSecondary }}>Active tasks: {activeTasks}</div>
+        </div>
+      </Card>
       <Card title="Gateway" colors={colors}>
         <Action onClick={() => { void run('gateway_start') }} label="Start Gateway" icon={<Play size={11} />} colors={colors} />
         <Action onClick={() => { void run('gateway_stop') }} label="Stop Gateway" icon={<Stop size={11} />} colors={colors} />
@@ -96,12 +218,70 @@ function AgentsTab() {
       </Card>
 
       <div style={{ gridColumn: '1 / -1' }}>
+        <div style={{ border: `1px solid ${colors.containerBorder}`, borderRadius: 10, background: colors.surfacePrimary, padding: 10, marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 6 }}>
+            Smart Command
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              value={cmdInput}
+              onChange={(e) => setCmdInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void runByInput() } }}
+              placeholder='Try: "gateway start", "plugins list", "update check"...'
+              style={{
+                flex: 1,
+                fontSize: 11,
+                borderRadius: 8,
+                background: colors.surfaceHover,
+                color: colors.textPrimary,
+                border: `1px solid ${colors.containerBorder}`,
+                padding: '7px 9px',
+              }}
+            />
+            <Action onClick={() => { void runByInput() }} label="Run" icon={<Play size={11} />} colors={colors} />
+          </div>
+          {suggestions.length > 0 && (
+            <div style={{ marginTop: 7, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {suggestions.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => { setCmdInput(s.label) }}
+                  style={{
+                    fontSize: 10,
+                    borderRadius: 999,
+                    border: `1px solid ${colors.containerBorder}`,
+                    background: colors.surfaceHover,
+                    color: colors.textSecondary,
+                    padding: '3px 8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {history.length > 0 && (
+            <div style={{ marginTop: 8, fontSize: 10, color: colors.textTertiary, overflowWrap: 'anywhere' }}>
+              Recent: {history.slice(0, 4).join(' • ')}
+            </div>
+          )}
+        </div>
+
         <div style={{ border: `1px solid ${colors.containerBorder}`, borderRadius: 10, background: colors.surfacePrimary, padding: 10, minHeight: 140 }}>
           <div style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 6 }}>
             Command Output {busy ? '(running...)' : ''}
           </div>
           <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 11, color: colors.textTertiary, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
             {output || 'Run an action to see output.'}
+          </pre>
+        </div>
+        <div style={{ border: `1px solid ${colors.containerBorder}`, borderRadius: 10, background: colors.surfacePrimary, padding: 10, minHeight: 120, marginTop: 10 }}>
+          <div style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 6 }}>
+            Live Logs (auto-refresh)
+          </div>
+          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 10, color: colors.textTertiary, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', maxHeight: 160, overflowY: 'auto' }}>
+            {logs.length > 0 ? logs.join('\n') : 'Waiting for live events...'}
           </pre>
         </div>
       </div>

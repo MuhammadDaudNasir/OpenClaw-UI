@@ -1226,6 +1226,21 @@ ipcMain.handle(IPC.OPENCLAW_RUN, async (_event, { action }: { action: string }) 
   return { ok: false, output: lastStdout, error: `${lastError}\nTried:\n${tried.join('\n')}`.trim() }
 })
 
+ipcMain.handle(IPC.GET_RUNTIME_METRICS, async () => {
+  const os = require('os') as typeof import('os')
+  const cpuCount = Math.max(1, os.cpus().length)
+  const load1m = os.loadavg()[0] || 0
+  const cpuPercent = Math.max(0, Math.min(100, Math.round((load1m / cpuCount) * 100)))
+  const memoryMb = Math.round(process.memoryUsage().rss / (1024 * 1024))
+  const uptimeSec = Math.round(process.uptime())
+  return {
+    cpuPercent,
+    memoryMb,
+    uptimeSec,
+    timestamp: Date.now(),
+  }
+})
+
 // ─── Theme Detection ───
 
 ipcMain.handle(IPC.GET_THEME, () => {
