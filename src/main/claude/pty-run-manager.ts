@@ -183,6 +183,8 @@ function isInputPrompt(line: string): boolean {
   if (cleaned === '❯' || cleaned === '>' || cleaned === '$') return true
   // Match prompt with trailing hint text (e.g. "❯ ? for shortcuts")
   if (/^[❯>]\s*(?:\?\s*for\s*shortcuts)?$/.test(cleaned)) return true
+  // OpenClaw TUI status line indicating ready/idle
+  if (/^gateway\s+connected\s*\|\s*idle\b/i.test(cleaned)) return true
   return false
 }
 

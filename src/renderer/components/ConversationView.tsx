@@ -812,6 +812,7 @@ const AssistantMessage = React.memo(function AssistantMessage({
   isSearchHit?: boolean
 }) {
   const colors = useColors()
+  const isGatewayStatus = /^gateway\b/i.test(message.content.trim())
 
   const markdownComponents = useMemo(() => ({
     table: ({ children }: any) => <TableScrollWrapper>{children}</TableScrollWrapper>,
@@ -829,6 +830,35 @@ const AssistantMessage = React.memo(function AssistantMessage({
     ),
     img: ({ src, alt }: any) => <ImageCard src={src} alt={alt} colors={colors} />,
   }), [colors])
+
+  if (isGatewayStatus) {
+    const parts = message.content.split('|').map((p) => p.trim()).filter(Boolean)
+    const primary = parts[0] || message.content
+    const secondary = parts[1]
+    const inner = (
+      <div className="py-1">
+        <div
+          className="text-[10px] leading-[1.4] px-1 py-0.5 inline-flex items-center gap-1"
+          style={{ color: colors.textMuted }}
+        >
+          <span>{primary}</span>
+          {secondary && <span style={{ color: colors.textTertiary }}>· {secondary}</span>}
+        </div>
+      </div>
+    )
+
+    if (skipMotion) return <div className="py-0.5">{inner}</div>
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.15 }}
+        className="py-0.5"
+      >
+        {inner}
+      </motion.div>
+    )
+  }
 
   const inner = (
     <div className="group/msg relative max-w-[92%]">
