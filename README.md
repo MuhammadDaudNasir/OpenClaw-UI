@@ -1,6 +1,6 @@
 # OpenClaw UI
 
-A lightweight, transparent desktop overlay for OpenClaw on macOS. This fork focuses on one-command deploy, app-style installation, and OpenClaw-first onboarding/control workflows.
+A lightweight, transparent desktop overlay for OpenClaw. This fork focuses on one-command deploy, app-style installation, and OpenClaw-first onboarding/control workflows.
   
 > Attribution: this project is a fork of [lcoutodemos/clui-cc](https://github.com/lcoutodemos/clui-cc), with original foundation by [lcoutodemos](https://github.com/lcoutodemos).
 
@@ -157,6 +157,7 @@ Renderer changes update instantly. Main-process changes require restarting `npm 
 | `./commands/setup-git.command --origin <url>` | Set your GitHub remote for this fork |
 | `npm run build` | Production build (no packaging) |
 | `npm run dist` | Package as macOS `.app` into `release/` |
+| `npm run dist:win` | Package Windows portable build into `release/` |
 | `npm run doctor` | Run environment diagnostic |
 
 </details>
@@ -171,6 +172,16 @@ git push -u origin $(git rev-parse --abbrev-ref HEAD)
 ```
 
 Full guide: [`docs/GITHUB_SETUP.md`](docs/GITHUB_SETUP.md)
+
+## Windows Build (Experimental)
+
+Windows packaging is now supported without changing the macOS path.
+
+```bash
+npm run dist:win
+```
+
+This creates Windows artifacts in `release/` (portable target).
 
 <details>
 <summary><strong>Setup Prerequisites (Detailed)</strong></summary>
@@ -292,7 +303,7 @@ npm run doctor
 
 ## Known Limitations
 
-- **macOS only** — transparent overlay, tray icon, and node-pty are macOS-specific. Windows/Linux support is not currently implemented.
+- **macOS is primary** — full overlay/tray behavior is tuned for macOS. Windows builds are supported in experimental mode via `npm run dist:win`.
 - **Requires OpenClaw CLI** — OpenClaw UI is a UI layer, not a standalone AI client. You need an authenticated `openclaw` CLI.
 - **Permission mode** — OpenClaw runs through PTY/TUI transport so approvals and tool execution remain interactive.
 

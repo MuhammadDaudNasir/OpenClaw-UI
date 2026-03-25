@@ -18,7 +18,9 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "dist": "electron-vite build --mode production && electron-builder --mac --dir",
+    "dist": "npm run dist:mac",
+    "dist:mac": "electron-vite build --mode production && electron-builder --mac --dir",
+    "dist:win": "electron-vite build --mode production && electron-builder --win --dir",
     "doctor": "bash scripts/doctor.sh",
     "setup:git": "bash ./commands/setup-git.command",
     "postinstall": "electron-builder install-app-deps && bash scripts/patch-dev-icon.sh"
@@ -51,6 +53,16 @@
       "extendInfo": {
         "NSMicrophoneUsageDescription": "OpenClaw UI uses your microphone to transcribe voice input locally with Whisper."
       }
+    },
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     }
   },
   "devDependencies": {
