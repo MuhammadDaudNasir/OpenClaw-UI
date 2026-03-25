@@ -577,17 +577,35 @@ export class PtyRunManager extends EventEmitter {
 
     // ─── Skip init/welcome output ───
     if (!handle.pastInit) {
-      // Wait until we see the echoed prompt for this request.
-      if (/^[❯>]\s+/.test(cleaned)) {
-        // Resume sessions may echo prior context, not the exact current prompt text.
-        // Any echoed input prompt means init shell is ready.
-        handle.sawPromptEcho = true
-      }
-      // Start parsing actual response only after a message bullet appears post-echo.
-      if (handle.sawPromptEcho && cleaned.startsWith('⏺')) {
-        handle.pastInit = true
+      const isPromptEcho = handle.promptSnippet
+        && cleaned.toLowerCase().startsWith(handle.promptSnippet)
+        && cleaned.length <= handle.promptSnippet.length + 2
+
+      if (handle.openclawTuiMode) {
+        // OpenClaw doesn't use the same "⏺" bullet, so treat the first real
+        // non-chrome line after the prompt echo as the start of the response.
+        if (isPromptEcho) {
+          handle.sawPromptEcho = true
+          return
+        }
+        if (handle.sawPromptEcho && !isUiChrome(cleaned)) {
+          handle.pastInit = true
+        } else {
+          return
+        }
       } else {
-        return
+        // Wait until we see the echoed prompt for this request.
+        if (/^[❯>]\s+/.test(cleaned)) {
+          // Resume sessions may echo prior context, not the exact current prompt text.
+          // Any echoed input prompt means init shell is ready.
+          handle.sawPromptEcho = true
+        }
+        // Start parsing actual response only after a message bullet appears post-echo.
+        if (handle.sawPromptEcho && cleaned.startsWith('⏺')) {
+          handle.pastInit = true
+        } else {
+          return
+        }
       }
     }
 
