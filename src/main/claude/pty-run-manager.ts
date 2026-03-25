@@ -321,6 +321,10 @@ export interface PtyRunHandle {
   sawPromptEcho: boolean
   /** OpenClaw native TUI mode (different output semantics) */
   openclawTuiMode: boolean
+  /** OpenClaw idle marker has appeared for this run */
+  sawIdleMarker: boolean
+  /** Last timestamp where TUI signaled active work */
+  lastWorkingSignalAt: number
 }
 
 // ─── PtyRunManager ───
@@ -472,6 +476,8 @@ export class PtyRunManager extends EventEmitter {
       })(),
       sawPromptEcho: false,
       openclawTuiMode: isOpenclaw,
+      sawIdleMarker: false,
+      lastWorkingSignalAt: Date.now(),
     }
 
     if (isOpenclaw) {
@@ -602,6 +608,17 @@ export class PtyRunManager extends EventEmitter {
     let cleaned = stripAnsi(rawLine).trim()
     if (cleaned.length === 0) return
     handle.lastOutputAt = Date.now()
+
+    // OpenClaw TUI state hints used to avoid premature completion.
+    if (handle.openclawTuiMode) {
+      if (/gateway\s+connected\s*\|\s*idle(?:\/exit)?\b/i.test(cleaned)) {
+        handle.sawIdleMarker = true
+      }
+      if (/\bworking\b|\bthinking\b|\brunning\b|\bexecuting\b|\bprocessing\b/i.test(cleaned)) {
+        handle.lastWorkingSignalAt = Date.now()
+      }
+    }
+
     const promptMarker = isInputPrompt(cleaned)
     // In OpenClaw TUI mode, keep prompt markers so quiescence-complete can fire.
     // Other chrome/status lines are still ignored.
@@ -747,7 +764,7 @@ export class PtyRunManager extends EventEmitter {
     // Do not complete early in that phase or the response is dropped.
     if (handle.openclawTuiMode && !handle.seenContent) {
       const waitedMs = Date.now() - handle.startedAt
-      if (waitedMs < 15000) {
+      if (waitedMs < 45000) {
         if (handle.quiescenceTimer) clearTimeout(handle.quiescenceTimer)
         handle.quiescenceTimer = setTimeout(() => this._checkQuiescenceCompletion(requestId, handle), QUIESCENCE_MS)
         return
@@ -759,12 +776,19 @@ export class PtyRunManager extends EventEmitter {
     const openclawSilence = handle.openclawTuiMode
       && handle.seenContent
       && !hasPromptMarker
-      && (Date.now() - handle.lastMeaningfulOutputAt >= QUIESCENCE_MS * 2)
+      && (Date.now() - handle.lastMeaningfulOutputAt >= QUIESCENCE_MS * 5)
+      && (Date.now() - handle.lastWorkingSignalAt >= QUIESCENCE_MS * 5)
 
     if (!hasPromptMarker && !openclawSilence) {
       // In OpenClaw TUI mode there may be no explicit prompt marker.
       // Keep polling until silence threshold is reached, then complete.
       if (handle.openclawTuiMode) {
+        // Prefer explicit idle marker before completing.
+        if (!handle.sawIdleMarker) {
+          if (handle.quiescenceTimer) clearTimeout(handle.quiescenceTimer)
+          handle.quiescenceTimer = setTimeout(() => this._checkQuiescenceCompletion(requestId, handle), QUIESCENCE_MS)
+          return
+        }
         if (handle.quiescenceTimer) clearTimeout(handle.quiescenceTimer)
         handle.quiescenceTimer = setTimeout(() => this._checkQuiescenceCompletion(requestId, handle), QUIESCENCE_MS)
       }
