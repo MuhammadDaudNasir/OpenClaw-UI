@@ -213,6 +213,7 @@ function isInputPrompt(line: string): boolean {
   if (/^[❯>]\s*(?:\?\s*for\s*shortcuts)?$/.test(cleaned)) return true
   // OpenClaw TUI status line indicating ready/idle
   if (/^gateway\s+connected\s*\|\s*idle\b/i.test(cleaned)) return true
+  if (/^gateway\s+connected\s*\|\s*idle\/exit\b/i.test(cleaned)) return true
   return false
 }
 
@@ -223,6 +224,9 @@ function isUiChrome(line: string): boolean {
   if (/^\s*◇\s*Doctor warnings/i.test(cleaned)) return true
   if (/^openclaw\s+tui\b/i.test(cleaned)) return true
   if (/^\s*(?:connected|connecting|idle)\s*\|\s*idle\b/i.test(cleaned)) return true
+  if (/^gateway\s+connected\s*\|\s*idle\/exit\b/i.test(cleaned)) return true
+  if (/^gateway\s+connected\s*\|\s*idle\b/i.test(cleaned)) return true
+  if (/^connected\s*\|\s*press\s+ctrl\+c\s+again\s+to\s+exit\b/i.test(cleaned)) return true
   if (/agent\s+[^\|]+\s+\|\s+session\s+[^\|]+/i.test(cleaned)) return true
   if (/\|\s+think\s+\w+\s+\|\s+tokens\s+/i.test(cleaned)) return true
   if (/^\s*tokens\s+\?\/\d+/i.test(cleaned)) return true
