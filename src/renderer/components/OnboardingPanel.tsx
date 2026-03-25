@@ -306,12 +306,12 @@ export function OnboardingPanel({
             {step === 4 && (
               <Block title="Shortcuts" icon={<Keyboard size={13} />} colors={colors}>
                 <div style={{ display: 'grid', gap: 6 }}>
-                  <ShortcutRow keys="Alt+Space" action="Toggle launcher" colors={colors} />
-                  <ShortcutRow keys="Cmd/Ctrl+Shift+K" action="Toggle launcher fallback" colors={colors} />
-                  <ShortcutRow keys="Cmd/Ctrl+Shift+M" action="Open Community Skills" colors={colors} />
-                  <ShortcutRow keys="Cmd/Ctrl+Shift+A" action="Open Agents Control Center" colors={colors} />
-                  <ShortcutRow keys="Cmd/Ctrl+Shift+S" action="Open Settings Control Center" colors={colors} />
-                  <ShortcutRow keys="Esc" action="Hide window" colors={colors} />
+                  <ShortcutRow keys="⌥ Space" action="Toggle launcher" colors={colors} />
+                  <ShortcutRow keys="⌘ ⇧ K" action="Toggle launcher fallback" colors={colors} />
+                  <ShortcutRow keys="⌘ ⇧ M" action="Open Community Skills" colors={colors} />
+                  <ShortcutRow keys="⌘ ⇧ A" action="Open Agents Control Center" colors={colors} />
+                  <ShortcutRow keys="⌘ ⇧ S" action="Open Settings Control Center" colors={colors} />
+                  <ShortcutRow keys="⎋" action="Hide window" colors={colors} />
                 </div>
               </Block>
             )}
