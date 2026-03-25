@@ -58,6 +58,34 @@ function stripAnsi(str: string): string {
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '') // control chars except \n \r \t
 }
 
+function normalizeForMatch(input: string): { norm: string; map: number[] } {
+  let norm = ''
+  const map: number[] = []
+  let lastSpace = false
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i]
+    const lower = ch.toLowerCase()
+    if (/[a-z0-9]/.test(lower)) {
+      norm += lower
+      map.push(i)
+      lastSpace = false
+      continue
+    }
+    if (/\s/.test(lower) || /[^a-z0-9]/.test(lower)) {
+      if (!lastSpace && norm.length > 0) {
+        norm += ' '
+        map.push(i)
+        lastSpace = true
+      }
+    }
+  }
+  if (norm.endsWith(' ')) {
+    norm = norm.slice(0, -1)
+    map.pop()
+  }
+  return { norm, map }
+}
+
 // ─── Permission Prompt Detection ───
 
 interface ParsedPermission {
@@ -283,6 +311,8 @@ export interface PtyRunHandle {
   promptSnippet: string
   /** Full prompt line (last non-empty line) for OpenClaw echo detection */
   promptLine: string
+  /** Normalized prompt for fuzzy matching in OpenClaw TUI */
+  promptKey: string
   /** Whether we saw an echoed prompt for current request */
   sawPromptEcho: boolean
   /** OpenClaw native TUI mode (different output semantics) */
@@ -319,6 +349,8 @@ export class PtyRunManager extends EventEmitter {
   private _isDuplicateLine(line: string): boolean {
     return this.recentLineSet.has(line)
   }
+
+  // (moved to class methods below)
 
   /**
    * node-pty prebuilt spawn-helper may lose execute bit depending on install/archive flow.
@@ -428,6 +460,11 @@ export class PtyRunManager extends EventEmitter {
       promptLine: (() => {
         const lines = options.prompt.split('\n').map((l) => l.trim()).filter(Boolean)
         return (lines[lines.length - 1] || options.prompt).trim()
+      })(),
+      promptKey: (() => {
+        const lines = options.prompt.split('\n').map((l) => l.trim()).filter(Boolean)
+        const line = (lines[lines.length - 1] || options.prompt).trim()
+        return normalizeForMatch(line).norm
       })(),
       sawPromptEcho: false,
       openclawTuiMode: isOpenclaw,
@@ -607,26 +644,26 @@ export class PtyRunManager extends EventEmitter {
         && cleaned.length <= handle.promptSnippet.length + 2
 
       if (handle.openclawTuiMode) {
-        const promptLine = handle.promptLine.trim()
-        const promptLower = promptLine.toLowerCase()
-        const cleanedLower = cleaned.toLowerCase()
-        const idx = promptLine ? cleanedLower.lastIndexOf(promptLower) : -1
-
-        if (idx !== -1) {
-          handle.sawPromptEcho = true
-          handle.textAccumulator = ''
-          handle.ptyBuffer = []
-          handle.seenContent = false
-
-          const after = cleaned.slice(idx + promptLine.length).trim()
-          if (!after) return
-          // Treat text after the last prompt echo as the actual response start.
-          cleaned = after
-          handle.pastInit = true
-        } else {
+        if (!handle.promptKey) return
+        const { norm, map } = normalizeForMatch(cleaned)
+        const idx = norm.lastIndexOf(handle.promptKey)
+        if (idx === -1) {
           // Ignore all history until we see the current prompt echoed.
           return
         }
+
+        handle.sawPromptEcho = true
+        handle.textAccumulator = ''
+        handle.ptyBuffer = []
+        handle.seenContent = false
+        handle.pastInit = true
+
+        const endNorm = idx + handle.promptKey.length - 1
+        const endOrig = map[endNorm] ?? cleaned.length - 1
+        const after = cleaned.slice(endOrig + 1).trim()
+        if (!after) return
+        // Treat text after the last prompt echo as the actual response start.
+        cleaned = after
       } else {
         // Wait until we see the echoed prompt for this request.
         if (/^[❯>]\s+/.test(cleaned)) {
@@ -962,8 +999,8 @@ export class PtyRunManager extends EventEmitter {
     return this.activeRuns.has(requestId)
   }
 
-  getHandle(requestId: string): PtyRunHandle | undefined {
-    return this.activeRuns.get(requestId)
+  getHandle(requestId: string): PtyRunHandle | null {
+    return this.activeRuns.get(requestId) || this._finishedRuns.get(requestId) || null
   }
 
   getActiveRunIds(): string[] {

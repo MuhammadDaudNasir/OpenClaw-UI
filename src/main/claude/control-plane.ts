@@ -362,7 +362,10 @@ export class ControlPlane extends EventEmitter {
         return
       }
 
-      if (code === 0) {
+      const handle = this.ptyRunManager.getHandle(requestId)
+      const openclawCompleted = !!(handle?.openclawTuiMode && handle.runCompleteEmitted)
+
+      if (code === 0 || openclawCompleted) {
         this._setTabStatus(tabId, 'completed')
       } else if (signal) {
         this._setTabStatus(tabId, 'failed')
