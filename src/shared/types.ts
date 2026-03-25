@@ -326,6 +326,7 @@ export const IPC = {
   ANIMATE_HEIGHT: 'clui:animate-height',
   LIST_SESSIONS: 'clui:list-sessions',
   LOAD_SESSION: 'clui:load-session',
+  EXPORT_CONVERSATION: 'clui:export-conversation',
 
   // One-way events (main → renderer)
   TEXT_CHUNK: 'clui:text-chunk',

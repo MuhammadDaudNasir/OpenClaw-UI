@@ -11,6 +11,7 @@ const INPUT_MAX_HEIGHT = 140
 const MULTILINE_ENTER_HEIGHT = 52
 const MULTILINE_EXIT_HEIGHT = 50
 const INLINE_CONTROLS_RESERVED_WIDTH = 104
+const TRANSCRIBE_TIMEOUT_MS = 45000
 
 type VoiceState = 'idle' | 'recording' | 'transcribing'
 
@@ -37,6 +38,8 @@ export function InputBar() {
   const addAttachments = useSessionStore((s) => s.addAttachments)
   const removeAttachment = useSessionStore((s) => s.removeAttachment)
   const closeAuxPanels = useSessionStore((s) => s.closeAuxPanels)
+  const isExpanded = useSessionStore((s) => s.isExpanded)
+  const toggleExpanded = useSessionStore((s) => s.toggleExpanded)
 
   const setPreferredModel = useSessionStore((s) => s.setPreferredModel)
   const setOpenclawModel = useSessionStore((s) => s.setOpenclawModel)
@@ -285,10 +288,11 @@ export function InputBar() {
     if (textareaRef.current) {
       textareaRef.current.style.height = `${INPUT_MIN_HEIGHT}px`
     }
+    if (!isExpanded) toggleExpanded()
     sendMessage(prompt || 'See attached files')
     // Refocus after React re-renders from the state update
     requestAnimationFrame(() => textareaRef.current?.focus())
-  }, [input, isBusy, sendMessage, attachments.length, showSlashMenu, slashFilter, slashIndex, handleSlashSelect, openclawModels, activeProvider, setOpenclawModel, setPreferredModel, addSystemMessage, isConnecting])
+  }, [input, isBusy, sendMessage, attachments.length, showSlashMenu, slashFilter, slashIndex, handleSlashSelect, openclawModels, activeProvider, setOpenclawModel, setPreferredModel, addSystemMessage, isConnecting, isExpanded, toggleExpanded])
 
   // ─── Keyboard ───
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -367,7 +371,15 @@ export function InputBar() {
       try {
         const blob = new Blob(chunksRef.current, { type: mimeType })
         const wavBase64 = await blobToWavBase64(blob)
-        const result = await window.clui.transcribeAudio(wavBase64)
+        const result = await Promise.race([
+          window.clui.transcribeAudio(wavBase64),
+          new Promise<{ error: string | null; transcript: string | null }>((resolve) => {
+            setTimeout(() => resolve({
+              error: 'Transcription timed out. Try a shorter clip.',
+              transcript: null,
+            }), TRANSCRIBE_TIMEOUT_MS)
+          }),
+        ])
         if (result.error) setVoiceError(result.error)
         else if (result.transcript) setInput((prev) => (prev ? `${prev} ${result.transcript}` : result.transcript!))
       } catch (err: any) { setVoiceError(`Voice failed: ${err.message}`) }

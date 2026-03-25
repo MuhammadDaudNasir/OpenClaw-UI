@@ -1,16 +1,18 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   FileText, PencilSimple, FileArrowUp, Terminal, MagnifyingGlass, Globe,
   Robot, Question, Wrench, FolderOpen, Copy, Check, CaretRight, CaretDown,
-  SpinnerGap, ArrowCounterClockwise, Square, ClipboardText,
+  SpinnerGap, ArrowCounterClockwise, Square, CaretUp,
 } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
 import { PermissionCard } from './PermissionCard'
 import { PermissionDeniedCard } from './PermissionDeniedCard'
 import { useColors, useThemeStore } from '../theme'
+import { usePopoverLayer } from './PopoverLayer'
 import type { Message } from '../../shared/types'
 
 // ─── Constants ───
@@ -68,10 +70,15 @@ export function ConversationView() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchIndex, setSearchIndex] = useState(0)
   const [searchToast, setSearchToast] = useState<string | null>(null)
+  const [exportOpen, setExportOpen] = useState(false)
+  const exportButtonRef = useRef<HTMLButtonElement>(null)
+  const exportMenuRef = useRef<HTMLDivElement>(null)
+  const [exportPos, setExportPos] = useState<{ right: number; top: number }>({ right: 0, top: 0 })
   const isNearBottomRef = useRef(true)
   const prevTabIdRef = useRef(activeTabId)
   const colors = useColors()
   const expandedUI = useThemeStore((s) => s.expandedUI)
+  const popoverLayer = usePopoverLayer()
 
   const tab = tabs.find((t) => t.id === activeTabId)
 
@@ -142,7 +149,7 @@ export function ConversationView() {
       return next
     })
   }, [searchableIds.length])
-  const copyConversation = useCallback(async (format: 'md' | 'json') => {
+  const exportConversation = useCallback(async (format: 'md' | 'json') => {
     if (!tab) return
     const base = tab.messages.map((m) => ({
       role: m.role,
@@ -152,24 +159,59 @@ export function ConversationView() {
       toolStatus: m.toolStatus || null,
     }))
     try {
-      if (format === 'json') {
-        await navigator.clipboard.writeText(JSON.stringify(base, null, 2))
-        setSearchToast('Copied conversation JSON')
-      } else {
-        const md = base.map((m) => {
+      const now = new Date()
+      const stamp = now.toISOString().replace(/[:T]/g, '-').slice(0, 16)
+      const suggestedName = `openclaw-conversation-${stamp}.${format}`
+      const content = format === 'json'
+        ? JSON.stringify(base, null, 2)
+        : base.map((m) => {
           const who = m.role === 'assistant' ? 'OpenClaw' : m.role === 'user' ? 'You' : 'System'
           const head = `### ${who}${m.toolName ? ` (${m.toolName}${m.toolStatus ? ` · ${m.toolStatus}` : ''})` : ''}`
           return `${head}\n\n${m.content || '_empty_'}`
         }).join('\n\n')
-        await navigator.clipboard.writeText(md)
-        setSearchToast('Copied conversation Markdown')
+
+      const result = await window.clui.exportConversation({ format, suggestedName, content })
+      if (result.cancelled) {
+        setSearchToast('Export canceled')
+      } else if (result.ok) {
+        setSearchToast(`Exported ${format.toUpperCase()}`)
+      } else {
+        setSearchToast(result.error || 'Export failed')
       }
-      setTimeout(() => setSearchToast(null), 1400)
+      setTimeout(() => setSearchToast(null), 1600)
     } catch {
-      setSearchToast('Copy failed')
-      setTimeout(() => setSearchToast(null), 1400)
+      setSearchToast('Export failed')
+      setTimeout(() => setSearchToast(null), 1600)
     }
   }, [tab])
+
+  const updateExportPos = useCallback(() => {
+    if (!exportButtonRef.current) return
+    const rect = exportButtonRef.current.getBoundingClientRect()
+    const gap = 6
+    const right = window.innerWidth - rect.right
+    const top = rect.bottom + gap
+    setExportPos({ right, top })
+  }, [])
+
+  useEffect(() => {
+    if (!exportOpen) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (exportButtonRef.current?.contains(target)) return
+      if (exportMenuRef.current?.contains(target)) return
+      setExportOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [exportOpen])
+
+  useEffect(() => {
+    if (!exportOpen) return
+    const onResize = () => updateExportPos()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [exportOpen, updateExportPos])
 
   if (!tab) return null
 
@@ -216,60 +258,106 @@ export function ConversationView() {
         onScroll={handleScroll}
       >
         <div
-          className="mb-2 flex items-center gap-1.5"
+          className="mb-2 flex items-center justify-center gap-1.5"
           style={{ position: 'sticky', top: 0, zIndex: 3, background: colors.containerBg, paddingBottom: 4 }}
         >
           <div
-            className="flex items-center gap-1 rounded-md px-2 py-1 flex-1"
-            style={{ border: `1px solid ${colors.containerBorder}`, background: colors.surfacePrimary }}
+            className="flex items-center gap-2 rounded-full px-3 py-1.5"
+            style={{ border: `1px solid ${colors.containerBorder}`, background: colors.containerBg }}
           >
             <MagnifyingGlass size={12} style={{ color: colors.textTertiary }} />
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search chat..."
-              className="w-full bg-transparent outline-none text-[11px]"
-              style={{ color: colors.textPrimary }}
+              className="bg-transparent outline-none text-[11px]"
+              style={{ color: colors.textPrimary, width: 200 }}
             />
-            <span className="text-[10px]" style={{ color: colors.textTertiary }}>
+            <span className="text-[10px]" style={{ color: colors.textTertiary, minWidth: 36, textAlign: 'right' }}>
               {searchableIds.length > 0 ? `${Math.min(searchIndex + 1, searchableIds.length)}/${searchableIds.length}` : '0'}
             </span>
+            <div className="flex items-center gap-0.5 ml-1">
+              <button
+                onClick={() => jumpSearch(-1)}
+                className="text-[10px] p-1 rounded-full"
+                style={{
+                  border: `1px solid ${colors.containerBorder}`,
+                  color: colors.textSecondary,
+                  background: colors.containerBg,
+                  opacity: searchableIds.length === 0 ? 0.4 : 1,
+                }}
+                title="Previous match"
+                disabled={searchableIds.length === 0}
+              >
+                <CaretUp size={12} />
+              </button>
+              <button
+                onClick={() => jumpSearch(1)}
+                className="text-[10px] p-1 rounded-full"
+                style={{
+                  border: `1px solid ${colors.containerBorder}`,
+                  color: colors.textSecondary,
+                  background: colors.containerBg,
+                  opacity: searchableIds.length === 0 ? 0.4 : 1,
+                }}
+                title="Next match"
+                disabled={searchableIds.length === 0}
+              >
+                <CaretDown size={12} />
+              </button>
+            </div>
           </div>
           <button
-            onClick={() => jumpSearch(-1)}
-            className="text-[10px] px-2 py-1 rounded-md"
+            ref={exportButtonRef}
+            onClick={() => {
+              if (!exportOpen) updateExportPos()
+              setExportOpen((o) => !o)
+            }}
+            className="text-[10px] p-2 rounded-md inline-flex items-center gap-1"
             style={{ border: `1px solid ${colors.containerBorder}`, color: colors.textSecondary, background: colors.surfacePrimary }}
-            title="Previous match"
+            title="Export conversation"
           >
-            Prev
-          </button>
-          <button
-            onClick={() => jumpSearch(1)}
-            className="text-[10px] px-2 py-1 rounded-md"
-            style={{ border: `1px solid ${colors.containerBorder}`, color: colors.textSecondary, background: colors.surfacePrimary }}
-            title="Next match"
-          >
-            Next
-          </button>
-          <button
-            onClick={() => { void copyConversation('md') }}
-            className="text-[10px] px-2 py-1 rounded-md inline-flex items-center gap-1"
-            style={{ border: `1px solid ${colors.containerBorder}`, color: colors.textSecondary, background: colors.surfacePrimary }}
-            title="Copy conversation as Markdown"
-          >
-            <ClipboardText size={11} />
-            MD
-          </button>
-          <button
-            onClick={() => { void copyConversation('json') }}
-            className="text-[10px] px-2 py-1 rounded-md inline-flex items-center gap-1"
-            style={{ border: `1px solid ${colors.containerBorder}`, color: colors.textSecondary, background: colors.surfacePrimary }}
-            title="Copy conversation as JSON"
-          >
-            <ClipboardText size={11} />
-            JSON
+            <FileArrowUp size={12} />
           </button>
         </div>
+
+        {popoverLayer && exportOpen && createPortal(
+          <div
+            ref={exportMenuRef}
+            className="rounded-md p-1 shadow-lg"
+            style={{
+              position: 'fixed',
+              right: exportPos.right,
+              top: exportPos.top,
+              background: colors.surfacePrimary,
+              border: `1px solid ${colors.containerBorder}`,
+              zIndex: 1000,
+              minWidth: 160,
+            }}
+          >
+            <button
+              className="w-full text-left text-[11px] px-2 py-1 rounded-md transition-colors"
+              style={{ color: colors.textPrimary }}
+              onClick={() => {
+                setExportOpen(false)
+                void exportConversation('md')
+              }}
+            >
+              Export Markdown
+            </button>
+            <button
+              className="w-full text-left text-[11px] px-2 py-1 rounded-md transition-colors"
+              style={{ color: colors.textPrimary }}
+              onClick={() => {
+                setExportOpen(false)
+                void exportConversation('json')
+              }}
+            >
+              Export JSON
+            </button>
+          </div>,
+          popoverLayer,
+        )}
 
         {/* Load older button */}
         {hasOlder && (
@@ -976,7 +1064,35 @@ function SystemMessage({
   isSearchHit?: boolean
 }) {
   const isError = message.content.startsWith('Error:') || message.content.includes('unexpectedly')
+  const isGatewayStatus = /^gateway\b/i.test(message.content.trim())
   const colors = useColors()
+
+  if (isGatewayStatus) {
+    const parts = message.content.split('|').map((p) => p.trim()).filter(Boolean)
+    const primary = parts[0] || message.content
+    const secondary = parts[1]
+    const inner = (
+      <div
+        className="text-[10px] leading-[1.4] px-1 py-0.5 inline-flex items-center gap-1"
+        style={{ color: colors.textMuted }}
+      >
+        <span>{primary}</span>
+        {secondary && <span style={{ color: colors.textTertiary }}>· {secondary}</span>}
+      </div>
+    )
+
+    if (skipMotion) return <div className="py-0.5">{inner}</div>
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.15 }}
+        className="py-0.5"
+      >
+        {inner}
+      </motion.div>
+    )
+  }
 
   const inner = (
     <div

@@ -43,7 +43,7 @@ mkdir -p "$WORK_DIR/repo"
 tar -xzf "$WORK_DIR/repo.tar.gz" -C "$WORK_DIR/repo" --strip-components=1
 cd "$WORK_DIR/repo"
 
-./deploy.command --app
+./commands/deploy.command --app
 
 echo
 echo "Install complete."

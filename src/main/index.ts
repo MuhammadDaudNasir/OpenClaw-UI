@@ -757,209 +757,249 @@ ipcMain.handle(IPC.PASTE_IMAGE, async (_event, dataUrl: string) => {
   }
 })
 
-ipcMain.handle(IPC.TRANSCRIBE_AUDIO, async (_event, audioBase64: string) => {
-  const { writeFileSync, existsSync, unlinkSync, readFileSync } = require('fs')
-  const { execFile } = require('child_process')
-  const { join, basename } = require('path')
-  const { tmpdir } = require('os')
-
-  const startedAt = Date.now()
-  const phaseMs: Record<string, number> = {}
-  const mark = (name: string, t0: number) => { phaseMs[name] = Date.now() - t0 }
-
-  const tmpWav = join(tmpdir(), `clui-voice-${Date.now()}.wav`)
+ipcMain.handle(IPC.EXPORT_CONVERSATION, async (_event, args: { format: 'md' | 'json'; suggestedName: string; content: string }) => {
   try {
-    const runExecFile = (bin: string, args: string[], timeout: number): Promise<string> =>
-      new Promise((resolve, reject) => {
-        execFile(bin, args, { encoding: 'utf-8', timeout }, (err: any, stdout: string, stderr: string) => {
-          if (err) {
-            const detail = stderr?.trim() || stdout?.trim() || err.message
-            reject(new Error(detail))
-            return
-          }
-          resolve(stdout || '')
+    const { join } = require('path')
+    const { writeFileSync } = require('fs')
+    const { format, suggestedName, content } = args
+
+    const filters = format === 'json'
+      ? [{ name: 'JSON', extensions: ['json'] }]
+      : [{ name: 'Markdown', extensions: ['md'] }]
+
+    const defaultPath = join(app.getPath('documents'), suggestedName)
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: 'Export conversation',
+      defaultPath,
+      filters,
+    })
+
+    if (canceled || !filePath) return { ok: false, cancelled: true }
+    writeFileSync(filePath, content, 'utf-8')
+    return { ok: true, path: filePath }
+  } catch (err: any) {
+    return { ok: false, error: err.message || 'Export failed.' }
+  }
+})
+
+ipcMain.handle(IPC.TRANSCRIBE_AUDIO, async (_event, audioBase64: string) => {
+  const HARD_TIMEOUT_MS = 45000
+
+  const run = async () => {
+    const { writeFileSync, existsSync, unlinkSync, readFileSync } = require('fs')
+    const { execFile } = require('child_process')
+    const { join, basename } = require('path')
+    const { tmpdir } = require('os')
+
+    const startedAt = Date.now()
+    const phaseMs: Record<string, number> = {}
+    const mark = (name: string, t0: number) => { phaseMs[name] = Date.now() - t0 }
+
+    const tmpWav = join(tmpdir(), `clui-voice-${Date.now()}.wav`)
+    try {
+      const runExecFile = (bin: string, args: string[], timeout: number): Promise<string> =>
+        new Promise((resolve, reject) => {
+          execFile(bin, args, { encoding: 'utf-8', timeout }, (err: any, stdout: string, stderr: string) => {
+            if (err) {
+              const detail = stderr?.trim() || stdout?.trim() || err.message
+              reject(new Error(detail))
+              return
+            }
+            resolve(stdout || '')
+          })
         })
-      })
 
-    let t0 = Date.now()
-    const buf = Buffer.from(audioBase64, 'base64')
-    writeFileSync(tmpWav, buf)
-    mark('decode+write_wav', t0)
+      let t0 = Date.now()
+      const buf = Buffer.from(audioBase64, 'base64')
+      writeFileSync(tmpWav, buf)
+      mark('decode+write_wav', t0)
 
-    // Find whisper backend in priority order: whisperkit-cli (Apple Silicon CoreML) → whisper-cli (whisper-cpp) → whisper (python)
-    t0 = Date.now()
-    const candidates = [
-      '/opt/homebrew/bin/whisperkit-cli',
-      '/usr/local/bin/whisperkit-cli',
-      '/opt/homebrew/bin/whisper-cli',
-      '/usr/local/bin/whisper-cli',
-      '/opt/homebrew/bin/whisper',
-      '/usr/local/bin/whisper',
-      join(homedir(), '.local/bin/whisper'),
-    ]
-
-    let whisperBin = ''
-    for (const c of candidates) {
-      if (existsSync(c)) { whisperBin = c; break }
-    }
-    mark('probe_binary_paths', t0)
-
-    if (!whisperBin) {
+      // Find whisper backend in priority order: whisperkit-cli (Apple Silicon CoreML) → whisper-cli (whisper-cpp) → whisper (python)
       t0 = Date.now()
-      for (const name of ['whisperkit-cli', 'whisper-cli', 'whisper']) {
-        try {
-          whisperBin = await runExecFile('/bin/zsh', ['-lc', `whence -p ${name}`], 5000).then((s) => s.trim())
-          if (whisperBin) break
-        } catch {}
-      }
-      mark('probe_binary_whence', t0)
-    }
-
-    if (!whisperBin) {
-      const hint = process.arch === 'arm64'
-        ? 'brew install whisperkit-cli   (or: brew install whisper-cpp)'
-        : 'brew install whisper-cpp'
-      return {
-        error: `Whisper not found. Install with:\n  ${hint}`,
-        transcript: null,
-      }
-    }
-
-    const isWhisperKit = whisperBin.includes('whisperkit-cli')
-    const isWhisperCpp = !isWhisperKit && whisperBin.includes('whisper-cli')
-
-    log(`Transcribing with: ${whisperBin} (backend: ${isWhisperKit ? 'WhisperKit' : isWhisperCpp ? 'whisper-cpp' : 'Python whisper'})`)
-
-    let output: string
-    if (isWhisperKit) {
-      // WhisperKit (Apple Silicon CoreML) — auto-downloads models on first run
-      // Use --report to produce a JSON file with a top-level "text" field for deterministic parsing
-      const reportDir = tmpdir()
-      t0 = Date.now()
-      output = await runExecFile(
-        whisperBin,
-        ['transcribe', '--audio-path', tmpWav, '--model', 'tiny', '--without-timestamps', '--skip-special-tokens', '--report', '--report-path', reportDir],
-        60000
-      )
-      mark('whisperkit_transcribe_report', t0)
-
-      // WhisperKit writes <audioFileName>.json (filename without extension)
-      const wavBasename = basename(tmpWav, '.wav')
-      const reportPath = join(reportDir, `${wavBasename}.json`)
-      if (existsSync(reportPath)) {
-        try {
-          t0 = Date.now()
-          const report = JSON.parse(readFileSync(reportPath, 'utf-8'))
-          const transcript = (report.text || '').trim()
-          mark('whisperkit_parse_report_json', t0)
-          try { unlinkSync(reportPath) } catch {}
-          // Also clean up .srt that --report creates
-          const srtPath = join(reportDir, `${wavBasename}.srt`)
-          try { unlinkSync(srtPath) } catch {}
-          log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt })}`)
-          return { error: null, transcript }
-        } catch (parseErr: any) {
-          log(`WhisperKit JSON parse failed: ${parseErr.message}, falling back to stdout`)
-          try { unlinkSync(reportPath) } catch {}
-        }
-      }
-
-      // Performance fallback: avoid a second full transcription if report file is missing/invalid.
-      // Use stdout from the first run to keep latency close to pre-report behavior.
-      if (!output || !output.trim()) {
-        t0 = Date.now()
-        output = await runExecFile(
-          whisperBin,
-          ['transcribe', '--audio-path', tmpWav, '--model', 'tiny', '--without-timestamps', '--skip-special-tokens'],
-          60000
-        )
-        mark('whisperkit_transcribe_stdout_rerun', t0)
-      }
-    } else if (isWhisperCpp) {
-      // whisper-cpp: whisper-cli -m model -f file --no-timestamps
-      // Find model file — prefer multilingual (auto-detect language) over .en (English-only)
-      const modelCandidates = [
-        join(homedir(), '.local/share/whisper/ggml-base.bin'),
-        join(homedir(), '.local/share/whisper/ggml-tiny.bin'),
-        '/opt/homebrew/share/whisper-cpp/models/ggml-base.bin',
-        '/opt/homebrew/share/whisper-cpp/models/ggml-tiny.bin',
-        join(homedir(), '.local/share/whisper/ggml-base.en.bin'),
-        join(homedir(), '.local/share/whisper/ggml-tiny.en.bin'),
-        '/opt/homebrew/share/whisper-cpp/models/ggml-base.en.bin',
-        '/opt/homebrew/share/whisper-cpp/models/ggml-tiny.en.bin',
+      const candidates = [
+        '/opt/homebrew/bin/whisperkit-cli',
+        '/usr/local/bin/whisperkit-cli',
+        '/opt/homebrew/bin/whisper-cli',
+        '/usr/local/bin/whisper-cli',
+        '/opt/homebrew/bin/whisper',
+        '/usr/local/bin/whisper',
+        join(homedir(), '.local/bin/whisper'),
       ]
 
-      let modelPath = ''
-      for (const m of modelCandidates) {
-        if (existsSync(m)) { modelPath = m; break }
+      let whisperBin = ''
+      for (const c of candidates) {
+        if (existsSync(c)) { whisperBin = c; break }
+      }
+      mark('probe_binary_paths', t0)
+
+      if (!whisperBin) {
+        t0 = Date.now()
+        for (const name of ['whisperkit-cli', 'whisper-cli', 'whisper']) {
+          try {
+            whisperBin = await runExecFile('/bin/zsh', ['-lc', `whence -p ${name}`], 5000).then((s) => s.trim())
+            if (whisperBin) break
+          } catch {}
+        }
+        mark('probe_binary_whence', t0)
       }
 
-      if (!modelPath) {
+      if (!whisperBin) {
+        const hint = process.arch === 'arm64'
+          ? 'brew install whisperkit-cli   (or: brew install whisper-cpp)'
+          : 'brew install whisper-cpp'
         return {
-          error: 'Whisper model not found. Download with:\n  mkdir -p ~/.local/share/whisper && curl -L -o ~/.local/share/whisper/ggml-tiny.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin',
+          error: `Whisper not found. Install with:\n  ${hint}`,
           transcript: null,
         }
       }
 
-      const isEnglishOnly = modelPath.includes('.en.')
-      const langFlag = isEnglishOnly ? '-l en' : '-l auto'
-      t0 = Date.now()
-      output = await runExecFile(
-        whisperBin,
-        ['-m', modelPath, '-f', tmpWav, '--no-timestamps', '-l', isEnglishOnly ? 'en' : 'auto'],
-        30000
-      )
-      mark('whisper_cpp_transcribe', t0)
-    } else {
-      // Python whisper
-      t0 = Date.now()
-      output = await runExecFile(
-        whisperBin,
-        [tmpWav, '--model', 'tiny', '--output_format', 'txt', '--output_dir', tmpdir()],
-        30000
-      )
-      mark('python_whisper_transcribe', t0)
-      // Python whisper writes .txt file
-      const txtPath = tmpWav.replace('.wav', '.txt')
-      if (existsSync(txtPath)) {
+      const isWhisperKit = whisperBin.includes('whisperkit-cli')
+      const isWhisperCpp = !isWhisperKit && whisperBin.includes('whisper-cli')
+
+      log(`Transcribing with: ${whisperBin} (backend: ${isWhisperKit ? 'WhisperKit' : isWhisperCpp ? 'whisper-cpp' : 'Python whisper'})`)
+
+      let output: string
+      if (isWhisperKit) {
+        // WhisperKit (Apple Silicon CoreML) — auto-downloads models on first run
+        // Use --report to produce a JSON file with a top-level "text" field for deterministic parsing
+        const reportDir = tmpdir()
         t0 = Date.now()
-        const transcript = readFileSync(txtPath, 'utf-8').trim()
-        mark('python_whisper_read_txt', t0)
-        try { unlinkSync(txtPath) } catch {}
-        log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt })}`)
-        return { error: null, transcript }
+        output = await runExecFile(
+          whisperBin,
+          ['transcribe', '--audio-path', tmpWav, '--model', 'tiny', '--without-timestamps', '--skip-special-tokens', '--report', '--report-path', reportDir],
+          60000
+        )
+        mark('whisperkit_transcribe_report', t0)
+
+        // WhisperKit writes <audioFileName>.json (filename without extension)
+        const wavBasename = basename(tmpWav, '.wav')
+        const reportPath = join(reportDir, `${wavBasename}.json`)
+        if (existsSync(reportPath)) {
+          try {
+            t0 = Date.now()
+            const report = JSON.parse(readFileSync(reportPath, 'utf-8'))
+            const transcript = (report.text || '').trim()
+            mark('whisperkit_parse_report_json', t0)
+            try { unlinkSync(reportPath) } catch {}
+            // Also clean up .srt that --report creates
+            const srtPath = join(reportDir, `${wavBasename}.srt`)
+            try { unlinkSync(srtPath) } catch {}
+            log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt })}`)
+            return { error: null, transcript }
+          } catch (parseErr: any) {
+            log(`WhisperKit JSON parse failed: ${parseErr.message}, falling back to stdout`)
+            try { unlinkSync(reportPath) } catch {}
+          }
+        }
+
+        // Performance fallback: avoid a second full transcription if report file is missing/invalid.
+        // Use stdout from the first run to keep latency close to pre-report behavior.
+        if (!output || !output.trim()) {
+          t0 = Date.now()
+          output = await runExecFile(
+            whisperBin,
+            ['transcribe', '--audio-path', tmpWav, '--model', 'tiny', '--without-timestamps', '--skip-special-tokens'],
+            60000
+          )
+          mark('whisperkit_transcribe_stdout_rerun', t0)
+        }
+      } else if (isWhisperCpp) {
+        // whisper-cpp: whisper-cli -m model -f file --no-timestamps
+        // Find model file — prefer multilingual (auto-detect language) over .en (English-only)
+        const modelCandidates = [
+          join(homedir(), '.local/share/whisper/ggml-base.bin'),
+          join(homedir(), '.local/share/whisper/ggml-tiny.bin'),
+          '/opt/homebrew/share/whisper-cpp/models/ggml-base.bin',
+          '/opt/homebrew/share/whisper-cpp/models/ggml-tiny.bin',
+          join(homedir(), '.local/share/whisper/ggml-base.en.bin'),
+          join(homedir(), '.local/share/whisper/ggml-tiny.en.bin'),
+          '/opt/homebrew/share/whisper-cpp/models/ggml-base.en.bin',
+          '/opt/homebrew/share/whisper-cpp/models/ggml-tiny.en.bin',
+        ]
+
+        let modelPath = ''
+        for (const m of modelCandidates) {
+          if (existsSync(m)) { modelPath = m; break }
+        }
+
+        if (!modelPath) {
+          return {
+            error: 'Whisper model not found. Download with:\n  mkdir -p ~/.local/share/whisper && curl -L -o ~/.local/share/whisper/ggml-tiny.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin',
+            transcript: null,
+          }
+        }
+
+        const isEnglishOnly = modelPath.includes('.en.')
+        t0 = Date.now()
+        output = await runExecFile(
+          whisperBin,
+          ['-m', modelPath, '-f', tmpWav, '--no-timestamps', '-l', isEnglishOnly ? 'en' : 'auto'],
+          30000
+        )
+        mark('whisper_cpp_transcribe', t0)
+      } else {
+        // Python whisper
+        t0 = Date.now()
+        output = await runExecFile(
+          whisperBin,
+          [tmpWav, '--model', 'tiny', '--output_format', 'txt', '--output_dir', tmpdir()],
+          30000
+        )
+        mark('python_whisper_transcribe', t0)
+        // Python whisper writes .txt file
+        const txtPath = tmpWav.replace('.wav', '.txt')
+        if (existsSync(txtPath)) {
+          t0 = Date.now()
+          const transcript = readFileSync(txtPath, 'utf-8').trim()
+          mark('python_whisper_read_txt', t0)
+          try { unlinkSync(txtPath) } catch {}
+          log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt })}`)
+          return { error: null, transcript }
+        }
+        // File not created — Python whisper failed silently
+        return {
+          error: `Whisper output file not found at ${txtPath}. Check disk space and permissions.`,
+          transcript: null,
+        }
       }
-      // File not created — Python whisper failed silently
+
+      // WhisperKit (stdout fallback) and whisper-cpp print to stdout directly
+      // Strip timestamp patterns and known hallucination outputs
+      const HALLUCINATIONS = /^\s*(\[BLANK_AUDIO\]|you\.?|thank you\.?|thanks\.?)\s*$/i
+      const transcript = output
+        .replace(/\[[\d:.]+\s*-->\s*[\d:.]+\]\s*/g, '')
+        .trim()
+
+      if (HALLUCINATIONS.test(transcript)) {
+        log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt })}`)
+        return { error: null, transcript: '' }
+      }
+
+      log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt })}`)
+      return { error: null, transcript: transcript || '' }
+    } catch (err: any) {
+      log(`Transcription error: ${err.message}`)
+      log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt, failed: true })}`)
       return {
-        error: `Whisper output file not found at ${txtPath}. Check disk space and permissions.`,
+        error: `Transcription failed: ${err.message}`,
         transcript: null,
       }
+    } finally {
+      try { unlinkSync(tmpWav) } catch {}
     }
-
-    // WhisperKit (stdout fallback) and whisper-cpp print to stdout directly
-    // Strip timestamp patterns and known hallucination outputs
-    const HALLUCINATIONS = /^\s*(\[BLANK_AUDIO\]|you\.?|thank you\.?|thanks\.?)\s*$/i
-    const transcript = output
-      .replace(/\[[\d:.]+\s*-->\s*[\d:.]+\]\s*/g, '')
-      .trim()
-
-    if (HALLUCINATIONS.test(transcript)) {
-      log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt })}`)
-      return { error: null, transcript: '' }
-    }
-
-    log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt })}`)
-    return { error: null, transcript: transcript || '' }
-  } catch (err: any) {
-    log(`Transcription error: ${err.message}`)
-    log(`Transcription timing(ms): ${JSON.stringify({ ...phaseMs, total: Date.now() - startedAt, failed: true })}`)
-    return {
-      error: `Transcription failed: ${err.message}`,
-      transcript: null,
-    }
-  } finally {
-    try { unlinkSync(tmpWav) } catch {}
   }
+
+  let timeoutId: NodeJS.Timeout
+  const timeoutPromise = new Promise<{ error: string | null; transcript: string | null }>((resolve) => {
+    timeoutId = setTimeout(() => resolve({
+      error: 'Transcription timed out. Try a shorter clip.',
+      transcript: null,
+    }), HARD_TIMEOUT_MS)
+  })
+
+  const result = await Promise.race([run(), timeoutPromise])
+  clearTimeout(timeoutId)
+  return result
 })
 
 ipcMain.handle(IPC.GET_DIAGNOSTICS, () => {
