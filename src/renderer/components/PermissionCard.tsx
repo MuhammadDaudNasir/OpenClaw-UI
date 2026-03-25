@@ -46,12 +46,16 @@ function formatInput(input?: Record<string, unknown>): string | null {
 
 export function PermissionCard({ tabId, permission, queueLength = 1 }: Props) {
   const respondPermission = useSessionStore((s) => s.respondPermission)
+  const permissionMode = useSessionStore((s) => s.permissionMode)
+  const tab = useSessionStore((s) => s.tabs.find((t) => t.id === tabId))
   const colors = useColors()
   const [responded, setResponded] = React.useState(false)
+  const [showTerminalPrompt, setShowTerminalPrompt] = React.useState(false)
 
   // Reset responded flag when the displayed permission changes (queue advancing)
   React.useEffect(() => {
     setResponded(false)
+    setShowTerminalPrompt(permissionMode === 'ask' && permission.toolTitle === 'Bash')
   }, [permission.questionId])
 
   const handleOption = (optionId: string) => {
@@ -118,6 +122,29 @@ export function PermissionCard({ tabId, permission, queueLength = 1 }: Props) {
             >
               {inputPreview}
             </pre>
+          )}
+
+          {showTerminalPrompt && (
+            <div
+              className="mb-2 px-2 py-1.5 rounded-md text-[10px] flex items-center justify-between gap-2"
+              style={{
+                background: colors.accentLight,
+                border: `1px solid ${colors.accentSoft}`,
+                color: colors.textSecondary,
+              }}
+            >
+              <span>Run this in Terminal preview instead?</span>
+              <button
+                onClick={() => {
+                  void window.clui.openInTerminal(tab?.claudeSessionId ?? null, tab?.workingDirectory)
+                  setShowTerminalPrompt(false)
+                }}
+                className="px-2 py-1 rounded-full text-[10px]"
+                style={{ background: colors.surfacePrimary, color: colors.accent, border: `1px solid ${colors.accentSoft}` }}
+              >
+                Open Terminal
+              </button>
+            </div>
           )}
 
           <div className="flex items-center gap-2 flex-wrap">

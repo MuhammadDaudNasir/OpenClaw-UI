@@ -567,7 +567,7 @@ export class PtyRunManager extends EventEmitter {
       }
 
       // Flush any accumulated text
-      this._flushText(requestId, handle)
+      this._flushText(requestId, handle, true)
 
       // Emit task_complete if we haven't already
       if (!handle.runCompleteEmitted) {
@@ -760,7 +760,7 @@ export class PtyRunManager extends EventEmitter {
       return
     }
 
-    this._flushText(requestId, handle)
+    this._flushText(requestId, handle, true)
     if (!handle.runCompleteEmitted) {
       handle.runCompleteEmitted = true
       this.emit('normalized', requestId, {
@@ -795,12 +795,14 @@ export class PtyRunManager extends EventEmitter {
     this._textFlushTimers.set(requestId, timer)
   }
 
-  private _flushText(requestId: string, handle: PtyRunHandle): void {
+  private _flushText(requestId: string, handle: PtyRunHandle, force = false): void {
     const timer = this._textFlushTimers.get(requestId)
     if (timer) {
       clearTimeout(timer)
       this._textFlushTimers.delete(requestId)
     }
+
+    if (handle.openclawTuiMode && !force) return
 
     if (handle.textAccumulator.length > 0) {
       this.emit('normalized', requestId, {
@@ -835,7 +837,7 @@ export class PtyRunManager extends EventEmitter {
     handle.permissionPhase = 'waiting_user'
 
     // Flush any accumulated text first
-    this._flushText(requestId, handle)
+    this._flushText(requestId, handle, true)
 
     // Generate a unique question ID
     const questionId = `pty-perm-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
