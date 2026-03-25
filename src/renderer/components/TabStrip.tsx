@@ -72,10 +72,10 @@ export function TabStrip() {
                 <motion.div
                   key={tab.id}
                   layout
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.15 }}
+                  initial={{ opacity: 0, scale: 0.92, y: 2 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.92, y: -2 }}
+                  transition={{ type: 'spring', stiffness: 520, damping: 32, mass: 0.6 }}
                   whileHover={{ y: -1 }}
                   whileTap={{ scale: 0.985 }}
                   onClick={() => selectTab(tab.id)}
@@ -84,8 +84,8 @@ export function TabStrip() {
                     background: 'transparent',
                     border: '1px solid transparent',
                     borderRadius: 9999,
-                    padding: '4px 10px',
-                    fontSize: 12,
+                    padding: '6px 12px',
+                    fontSize: 13,
                     color: isActive ? colors.textPrimary : colors.textTertiary,
                     fontWeight: isActive ? 500 : 400,
                     position: 'relative',
@@ -111,7 +111,7 @@ export function TabStrip() {
                   {tabs.length > 1 && (
                     <button
                       onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}
-                      className="flex-shrink-0 rounded-full w-4 h-4 flex items-center justify-center transition-opacity"
+                      className="flex-shrink-0 rounded-full w-4.5 h-4.5 flex items-center justify-center transition-opacity"
                       style={{
                         opacity: isActive ? 0.5 : 0,
                         color: colors.textSecondary,
@@ -121,7 +121,7 @@ export function TabStrip() {
                       onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = isActive ? '0.5' : '0' }}
                     >
-                      <X size={10} />
+                      <X size={11} />
                     </button>
                   )}
                 </motion.div>
@@ -132,14 +132,14 @@ export function TabStrip() {
       </div>
 
       {/* Pinned action buttons — always visible on the right */}
-      <div className="flex items-center gap-0.5 flex-shrink-0 ml-1 pr-2">
+      <div className="flex items-center gap-1 flex-shrink-0 ml-1 pr-2">
         <button
           onClick={() => createTab()}
-          className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-colors"
+          className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full transition-colors"
           style={{ color: colors.textTertiary }}
           title="New tab"
         >
-          <Plus size={14} />
+          <Plus size={15} />
         </button>
 
         <HistoryPicker />

@@ -74,6 +74,7 @@ export interface CluiAPI {
   onSkillStatus(callback: (status: { name: string; state: string; error?: string; reason?: string }) => void): () => void
   onWindowShown(callback: () => void): () => void
   onShortcutAction(callback: (action: string) => void): () => void
+  setDragHolding(holding: boolean): void
 }
 
 const api: CluiAPI = {
@@ -177,6 +178,8 @@ const api: CluiAPI = {
     ipcRenderer.on('clui:shortcut-action', handler)
     return () => ipcRenderer.removeListener('clui:shortcut-action', handler)
   },
+
+  setDragHolding: (holding) => ipcRenderer.send(IPC.DRAG_HOLDING, holding),
 }
 
 contextBridge.exposeInMainWorld('clui', api)

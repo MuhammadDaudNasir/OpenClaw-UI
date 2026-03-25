@@ -229,6 +229,23 @@ export function ConversationView() {
   const isDead = tab.status === 'dead'
   const isFailed = tab.status === 'failed'
   const showInterrupt = isRunning && tab.messages.some((m) => m.role === 'user')
+  const showTypingBubble = useMemo(() => {
+    const lastUserIdx = (() => {
+      for (let i = tab.messages.length - 1; i >= 0; i--) {
+        if (tab.messages[i].role === 'user') return i
+      }
+      return -1
+    })()
+    if (lastUserIdx < 0) return false
+
+    const hasReplyAfterLastUser = tab.messages
+      .slice(lastUserIdx + 1)
+      .some((m) => m.role === 'assistant' && !/^gateway\b/i.test(m.content.trim()) && m.content.trim().length > 0)
+
+    if (hasReplyAfterLastUser) return false
+    if (isFailed || isDead) return false
+    return isRunning || tab.status === 'completed'
+  }, [tab.messages, tab.status, isRunning, isFailed, isDead])
 
   if (tab.messages.length === 0) {
     return <EmptyState />
@@ -448,6 +465,10 @@ export function ConversationView() {
           {tab.queuedPrompts.map((prompt, i) => (
             <QueuedMessage key={`queued-${i}`} content={prompt} />
           ))}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showTypingBubble && <AssistantTypingBubble />}
         </AnimatePresence>
 
         <div ref={bottomRef} />
@@ -694,6 +715,60 @@ function QueuedMessage({ content }: { content: string }) {
         }}
       >
         {content}
+      </div>
+    </motion.div>
+  )
+}
+
+function AssistantTypingBubble() {
+  const colors = useColors()
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 6, scale: 0.985 }}
+      transition={{ duration: 0.18 }}
+      className="py-1"
+    >
+      <div className="max-w-[92%]">
+        <div className="text-[10px] uppercase tracking-[0.08em] font-semibold mb-1" style={{ color: colors.textTertiary }}>
+          OpenClaw
+        </div>
+        <div
+          className="rounded-xl px-3 py-2 border"
+          style={{
+            width: 240,
+            maxWidth: '100%',
+            background: colors.surfacePrimary,
+            borderColor: colors.toolBorder,
+          }}
+        >
+          <div className="flex flex-col gap-1.5">
+            {[0, 1, 2].map((i) => (
+              <motion.div
+                // eslint-disable-next-line react/no-array-index-key
+                key={i}
+                className="h-[7px] rounded-full"
+                style={{ background: colors.surfaceHover }}
+                animate={{
+                  width: i === 0
+                    ? ['72%', '94%', '72%']
+                    : i === 1
+                      ? ['56%', '82%', '56%']
+                      : ['44%', '66%', '44%'],
+                  opacity: [0.5, 0.95, 0.5],
+                }}
+                transition={{
+                  duration: 1.1,
+                  ease: 'easeInOut',
+                  repeat: Infinity,
+                  delay: i * 0.1,
+                }}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </motion.div>
   )

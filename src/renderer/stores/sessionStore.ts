@@ -711,10 +711,8 @@ export const useSessionStore = create<State>((set, get) => ({
     const resolvedPath = projectPath || (tab?.hasChosenDirectory ? tab.workingDirectory : (staticInfo?.homePath || tab?.workingDirectory || '~'))
     if (!tab) return
 
-    // Guard: don't send while connecting (warmup in progress)
-    if (tab.status === 'connecting') return
-
-    const isBusy = tab.status === 'running'
+    // Guard: single-turn mode — don't send new prompts while a run is active.
+    if (tab.status === 'connecting' || tab.status === 'running') return
     const requestId = crypto.randomUUID()
 
     // Build full prompt with attachment context
@@ -730,8 +728,7 @@ export const useSessionStore = create<State>((set, get) => ({
       ? (prompt.length > 30 ? prompt.substring(0, 27) + '...' : prompt)
       : tab.title
 
-    // Optimistic update: clear attachments
-    // If busy, add to queuedPrompts (shown at bottom); otherwise add to messages and set connecting
+    // Optimistic update: clear attachments + append user message for active run.
     set((s) => ({
       tabs: s.tabs.map((t) => {
         if (t.id !== activeTabId) return t
@@ -744,14 +741,6 @@ export const useSessionStore = create<State>((set, get) => ({
               hasChosenDirectory: true,
               workingDirectory: resolvedPath,
             }
-        if (isBusy) {
-          return {
-            ...withEffectiveBase,
-            title,
-            attachments: [],
-            queuedPrompts: [...withEffectiveBase.queuedPrompts, prompt],
-          }
-        }
         return {
           ...withEffectiveBase,
           status: 'connecting' as TabStatus,

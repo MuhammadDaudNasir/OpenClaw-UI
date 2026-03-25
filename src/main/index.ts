@@ -183,7 +183,13 @@ function createWindow(): void {
   })
 
   // Auto-hide when focus is lost (clicking another app/window).
+  // Skip auto-hide while user is dragging files into the window.
+  let isDragHolding = false
+  ipcMain.on(IPC.DRAG_HOLDING, (_event, holding: boolean) => {
+    isDragHolding = !!holding
+  })
   mainWindow.on('blur', () => {
+    if (isDragHolding) return
     if (!forceQuit && mainWindow && mainWindow.isVisible()) {
       mainWindow.hide()
     }
@@ -1385,7 +1391,7 @@ app.whenReady().then(async () => {
     broadcast('clui:shortcut-action', 'open-settings')
   })
 
-  const trayIconPath = join(__dirname, '../../resources/icon.png')
+  const trayIconPath = join(__dirname, '../../resources/trayTemplate.png')
   const trayIcon = nativeImage.createFromPath(trayIconPath).resize({ width: 18, height: 18 })
   trayIcon.setTemplateImage(false)
   tray = new Tray(trayIcon)

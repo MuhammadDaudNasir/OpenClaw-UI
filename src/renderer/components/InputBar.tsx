@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Microphone, ArrowUp, SpinnerGap, X, Check } from '@phosphor-icons/react'
+import { Microphone, SpinnerGap, X, Check } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
 import { AttachmentChips } from './AttachmentChips'
 import { SlashCommandMenu, getFilteredCommandsWithExtras, type SlashCommand } from './SlashCommandMenu'
@@ -53,7 +53,7 @@ export function InputBar() {
   const isBusy = tab?.status === 'running' || tab?.status === 'connecting'
   const isConnecting = tab?.status === 'connecting'
   const hasContent = input.trim().length > 0 || (tab?.attachments?.length ?? 0) > 0
-  const canSend = !!tab && !isConnecting && hasContent
+  const canSend = !!tab && !isBusy && hasContent
   const attachments = tab?.attachments || []
   const showSlashMenu = slashFilter !== null && !isConnecting
   const skillCommands: SlashCommand[] = (tab?.sessionSkills || []).map((skill) => ({
@@ -282,7 +282,7 @@ export function InputBar() {
       return
     }
     if (!prompt && attachments.length === 0) return
-    if (isConnecting) return
+    if (isBusy) return
     setInput('')
     setSlashFilter(null)
     if (textareaRef.current) {
@@ -292,7 +292,7 @@ export function InputBar() {
     sendMessage(prompt || 'See attached files')
     // Refocus after React re-renders from the state update
     requestAnimationFrame(() => textareaRef.current?.focus())
-  }, [input, isBusy, sendMessage, attachments.length, showSlashMenu, slashFilter, slashIndex, handleSlashSelect, openclawModels, activeProvider, setOpenclawModel, setPreferredModel, addSystemMessage, isConnecting, isExpanded, toggleExpanded])
+  }, [input, isBusy, sendMessage, attachments.length, showSlashMenu, slashFilter, slashIndex, handleSlashSelect, openclawModels, activeProvider, setOpenclawModel, setPreferredModel, addSystemMessage, isExpanded, toggleExpanded])
 
   // ─── Keyboard ───
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -438,7 +438,7 @@ export function InputBar() {
                     : voiceState === 'transcribing'
                       ? 'Transcribing...'
                       : isBusy
-                        ? 'Type to queue a message...'
+                        ? 'Waiting for OpenClaw to finish...'
                         : 'Ask OpenClaw anything...'
               }
               rows={1}
@@ -471,9 +471,9 @@ export function InputBar() {
                       onClick={handleSend}
                       className="w-9 h-9 rounded-full flex items-center justify-center transition-colors"
                       style={{ background: colors.sendBg, color: colors.textOnAccent }}
-                      title={isBusy ? 'Queue message' : 'Send (Enter)'}
+                      title="Send (Enter)"
                     >
-                      <ArrowUp size={16} weight="bold" />
+                      <OpenClawSendGlyph />
                     </button>
                   </motion.div>
                 )}
@@ -496,7 +496,7 @@ export function InputBar() {
                     : voiceState === 'transcribing'
                       ? 'Transcribing...'
                       : isBusy
-                        ? 'Type to queue a message...'
+                        ? 'Waiting for OpenClaw to finish...'
                         : 'Ask OpenClaw anything...'
               }
               rows={1}
@@ -529,9 +529,9 @@ export function InputBar() {
                       onClick={handleSend}
                       className="w-9 h-9 rounded-full flex items-center justify-center transition-colors"
                       style={{ background: colors.sendBg, color: colors.textOnAccent }}
-                      title={isBusy ? 'Queue message' : 'Send (Enter)'}
+                      title="Send (Enter)"
                     >
-                      <ArrowUp size={16} weight="bold" />
+                      <OpenClawSendGlyph />
                     </button>
                   </motion.div>
                 )}
@@ -548,6 +548,18 @@ export function InputBar() {
         </div>
       )}
     </div>
+  )
+}
+
+function OpenClawSendGlyph() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4.5 16.5c2.6-4.2 7.2-6.3 13.5-5.2" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M8.2 9.2l1.4 2.4M12.3 7.7l.7 3.1M16.2 8.9l-1 2.7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+      <circle cx="8.1" cy="16.9" r="1.1" fill="currentColor" />
+      <circle cx="12.2" cy="16.1" r="1.1" fill="currentColor" />
+      <circle cx="16" cy="16.8" r="1.1" fill="currentColor" />
+    </svg>
   )
 }
 

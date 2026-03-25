@@ -31,6 +31,7 @@ export default function App() {
   const setSystemTheme = useThemeStore((s) => s.setSystemTheme)
   const expandedUI = useThemeStore((s) => s.expandedUI)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [draggingFiles, setDraggingFiles] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
   const [tourStep, setTourStep] = useState(0)
   const isExpanded = useSessionStore((s) => s.isExpanded)
@@ -71,7 +72,12 @@ export default function App() {
 
       const info = useSessionStore.getState().staticInfo
       const complete = localStorage.getItem('openclaw-onboarding-complete') === '1'
-      const needsOnboarding = !complete && !!info
+      const dismissed = localStorage.getItem('openclaw-onboarding-dismissed') === '1'
+      const seen = localStorage.getItem('openclaw-onboarding-seen') === '1'
+      const needsOnboarding = !!info && !complete && !dismissed && !seen
+      if (needsOnboarding) {
+        localStorage.setItem('openclaw-onboarding-seen', '1')
+      }
       setShowOnboarding(needsOnboarding)
     })
   }, [])
@@ -197,6 +203,45 @@ export default function App() {
       document.removeEventListener('mouseleave', onMouseLeave)
     }
   }, [])
+
+  // Keep window open while dragging files over it (prevents blur auto-hide).
+  useEffect(() => {
+    const hasFiles = (e: DragEvent) => {
+      const types = Array.from(e.dataTransfer?.types || [])
+      return types.includes('Files')
+    }
+    const onDragEnter = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      setDraggingFiles(true)
+    }
+    const onDragOver = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      setDraggingFiles(true)
+    }
+    const onDragLeave = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      if (e.relatedTarget == null) setDraggingFiles(false)
+    }
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      setDraggingFiles(false)
+    }
+    window.addEventListener('dragenter', onDragEnter)
+    window.addEventListener('dragover', onDragOver)
+    window.addEventListener('dragleave', onDragLeave)
+    window.addEventListener('drop', onDrop)
+    return () => {
+      window.removeEventListener('dragenter', onDragEnter)
+      window.removeEventListener('dragover', onDragOver)
+      window.removeEventListener('dragleave', onDragLeave)
+      window.removeEventListener('drop', onDrop)
+    }
+  }, [])
+
+  useEffect(() => {
+    window.clui.setDragHolding(draggingFiles)
+  }, [draggingFiles])
 
   // Layout dimensions — expandedUI widens and heightens the panel
   const contentWidth = expandedUI ? 700 : spacing.contentWidth
@@ -353,6 +398,10 @@ export default function App() {
               position: 'relative',
               zIndex: isExpanded ? 20 : 10,
             }}
+            onDragEnter={() => setDraggingFiles(true)}
+            onDragLeave={(e) => { if ((e.relatedTarget as Node | null) === null) setDraggingFiles(false) }}
+            onDrop={() => setDraggingFiles(false)}
+            onDragOver={(e) => e.preventDefault()}
           >
             {/* Top row: tabs + action controls */}
             <div
@@ -370,7 +419,7 @@ export default function App() {
                   disabled={isRunning}
                   style={topActionBtnStyle(colors, isRunning)}
                 >
-                  <Paperclip size={14} />
+                  <Paperclip size={16} />
                 </button>
                 <button
                   className="glass-surface"
@@ -379,7 +428,7 @@ export default function App() {
                   disabled={isRunning}
                   style={topActionBtnStyle(colors, isRunning)}
                 >
-                  <Camera size={14} />
+                  <Camera size={16} />
                 </button>
                 <button
                   className="glass-surface"
@@ -388,7 +437,7 @@ export default function App() {
                   disabled={isRunning}
                   style={topActionBtnStyle(colors, isRunning)}
                 >
-                  <HeadCircuit size={14} />
+                  <HeadCircuit size={16} />
                 </button>
                 <button
                   className="glass-surface"
@@ -397,7 +446,7 @@ export default function App() {
                   disabled={isRunning}
                   style={topActionBtnStyle(colors, isRunning)}
                 >
-                  <Sparkle size={14} />
+                  <Sparkle size={16} />
                 </button>
               </div>
             </div>
@@ -455,8 +504,8 @@ export default function App() {
 
 function topActionBtnStyle(colors: ReturnType<typeof useColors>, disabled: boolean): React.CSSProperties {
   return {
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 32,
     borderRadius: 999,
     border: `1px solid ${colors.containerBorder}`,
     background: colors.surfacePrimary,
