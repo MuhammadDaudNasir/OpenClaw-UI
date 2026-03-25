@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
-import { DotsThree, Bell, ArrowsOutSimple, Moon, GearSix, Terminal, Heartbeat, FolderOpen, Sparkle, Keyboard, ClipboardText } from '@phosphor-icons/react'
+import { DotsThree, Bell, ArrowsOutSimple, Moon, GearSix } from '@phosphor-icons/react'
 import { useThemeStore } from '../theme'
 import { useSessionStore } from '../stores/sessionStore'
 import { usePopoverLayer } from './PopoverLayer'
@@ -41,42 +41,6 @@ function RowToggle({
   )
 }
 
-function ActionBtn({
-  colors,
-  icon,
-  label,
-  onClick,
-}: {
-  colors: ReturnType<typeof useColors>
-  icon: React.ReactNode
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        fontSize: 10,
-        fontWeight: 600,
-        border: `1px solid ${colors.containerBorder}`,
-        background: colors.surfacePrimary,
-        color: colors.textSecondary,
-        borderRadius: 8,
-        padding: '5px 7px',
-        cursor: 'pointer',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 5,
-        fontFamily: 'inherit',
-      }}
-    >
-      {icon}
-      {label}
-    </button>
-  )
-}
-
 /* ─── Settings popover ─── */
 
 export function SettingsPopover() {
@@ -87,20 +51,11 @@ export function SettingsPopover() {
   const expandedUI = useThemeStore((s) => s.expandedUI)
   const setExpandedUI = useThemeStore((s) => s.setExpandedUI)
   const isExpanded = useSessionStore((s) => s.isExpanded)
-  const staticInfo = useSessionStore((s) => s.staticInfo)
-  const openclawUpdateInfo = useSessionStore((s) => s.openclawUpdateInfo)
-  const openclawUpdateBusy = useSessionStore((s) => s.openclawUpdateBusy)
-  const checkOpenclawUpdate = useSessionStore((s) => s.checkOpenclawUpdate)
-  const runOpenclawUpgrade = useSessionStore((s) => s.runOpenclawUpgrade)
   const openControlCenter = useSessionStore((s) => s.openControlCenter)
   const popoverLayer = usePopoverLayer()
   const colors = useColors()
 
   const [open, setOpen] = useState(false)
-  const [healthChecking, setHealthChecking] = useState(false)
-  const [healthText, setHealthText] = useState<string | null>(null)
-  const [showShortcuts, setShowShortcuts] = useState(false)
-  const [utilityText, setUtilityText] = useState<string | null>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ right: number; top?: number; bottom?: number; maxHeight?: number }>({ right: 0 })
@@ -166,48 +121,9 @@ export function SettingsPopover() {
     setOpen((o) => !o)
   }
 
-  const runHealth = async () => {
-    setHealthChecking(true)
-    const res = await window.clui.openclawHealth()
-    if (res.ok) {
-      const singleLine = (res.output || 'OK').split('\n').find(Boolean) || 'OK'
-      setHealthText(`Health: ${singleLine}`)
-    } else {
-      setHealthText(`Health failed: ${res.error || 'Unknown error'}`)
-    }
-    setHealthChecking(false)
-  }
-
   const openOnboarding = () => {
     localStorage.setItem('openclaw-onboarding-dismissed', '0')
     window.dispatchEvent(new Event('openclaw:show-onboarding'))
-  }
-
-  const copyDiagnostics = async () => {
-    try {
-      const payload = await window.clui.getDiagnostics()
-      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
-      setUtilityText('Diagnostics copied to clipboard.')
-    } catch {
-      setUtilityText('Failed to copy diagnostics.')
-    }
-  }
-
-  const copyShortcutCheatsheet = async () => {
-    const sheet = [
-      'Alt+Space — Toggle launcher',
-      'Cmd/Ctrl+Shift+K — Toggle fallback launcher',
-      'Cmd/Ctrl+Shift+M — Open community skills',
-      'Cmd/Ctrl+Shift+A — Open agents control center',
-      'Cmd/Ctrl+Shift+S — Open settings control center',
-      'Esc — Hide window',
-    ].join('\n')
-    try {
-      await navigator.clipboard.writeText(sheet)
-      setUtilityText('Shortcut list copied.')
-    } catch {
-      setUtilityText('Failed to copy shortcut list.')
-    }
   }
 
   return (
@@ -294,133 +210,8 @@ export function SettingsPopover() {
               <div className="flex items-center gap-2 mb-2">
                 <GearSix size={14} style={{ color: colors.textTertiary }} />
                 <div className="text-[12px] font-medium" style={{ color: colors.textPrimary }}>
-                  OpenClaw Controls
+                  Quick Links
                 </div>
-              </div>
-
-              <div
-                style={{
-                  border: `1px solid ${colors.containerBorder}`,
-                  borderRadius: 10,
-                  background: colors.surfaceHover,
-                  padding: '8px 9px',
-                  marginBottom: 7,
-                }}
-              >
-                <div className="text-[10px]" style={{ color: colors.textSecondary }}>
-                  {staticInfo?.cliCommand || 'openclaw'} {staticInfo?.version || 'unknown'}
-                </div>
-                <div className="text-[10px]" style={{ color: colors.textTertiary, marginTop: 2 }}>
-                  {staticInfo?.email
-                    ? `Signed in as ${staticInfo.email}`
-                    : staticInfo?.authSupported === false
-                      ? 'Auth status not exposed by this CLI build'
-                      : 'Not authenticated yet'}
-                </div>
-                {healthText && (
-                  <div className="text-[10px]" style={{ color: colors.textTertiary, marginTop: 4 }}>
-                    {healthText}
-                  </div>
-                )}
-                {openclawUpdateInfo && (
-                  <div className="text-[10px]" style={{ color: colors.textTertiary, marginTop: 4, whiteSpace: 'pre-wrap' }}>
-                    {openclawUpdateInfo.split('\n').slice(0, 3).join('\n')}
-                  </div>
-                )}
-              </div>
-
-              <div
-                style={{
-                  border: `1px solid ${colors.containerBorder}`,
-                  borderRadius: 10,
-                  background: colors.surfacePrimary,
-                  padding: '8px 9px',
-                  marginBottom: 7,
-                }}
-              >
-                <div className="text-[10px] font-semibold" style={{ color: colors.textPrimary }}>
-                  Credits & Attribution
-                </div>
-                <div className="text-[10px]" style={{ color: colors.textTertiary, marginTop: 2, lineHeight: 1.45 }}>
-                  Original project foundation by lcoutodemos (clui-cc). This OpenClaw UI fork is maintained by Muhammad Daud Nasir.
-                </div>
-                <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
-                  <button
-                    onClick={() => { void window.clui.openExternal('https://github.com/lcoutodemos/clui-cc') }}
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 600,
-                      padding: '4px 7px',
-                      borderRadius: 7,
-                      border: `1px solid ${colors.containerBorder}`,
-                      background: colors.surfaceHover,
-                      color: colors.textSecondary,
-                      cursor: 'pointer',
-                      fontFamily: 'inherit',
-                    }}
-                  >
-                    Open Original Repo
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                <ActionBtn
-                  colors={colors}
-                  icon={<Heartbeat size={11} />}
-                  label={healthChecking ? 'Checking...' : 'Health'}
-                  onClick={() => { void runHealth() }}
-                />
-                <ActionBtn
-                  colors={colors}
-                  icon={<Sparkle size={11} />}
-                  label="Onboard"
-                  onClick={() => { void window.clui.openclawOnboard() }}
-                />
-                <ActionBtn
-                  colors={colors}
-                  icon={<Terminal size={11} />}
-                  label="Terminal"
-                  onClick={() => { void window.clui.openInTerminal(null, staticInfo?.homePath || '~') }}
-                />
-                <ActionBtn
-                  colors={colors}
-                  icon={<FolderOpen size={11} />}
-                  label="Open Home"
-                  onClick={() => { if (staticInfo?.homePath) void window.clui.openPath(`${staticInfo.homePath}/.openclaw`) }}
-                />
-                <ActionBtn
-                  colors={colors}
-                  icon={<Sparkle size={11} />}
-                  label={openclawUpdateBusy ? 'Checking...' : 'Check Update'}
-                  onClick={() => { void checkOpenclawUpdate() }}
-                />
-                <ActionBtn
-                  colors={colors}
-                  icon={<Sparkle size={11} />}
-                  label={openclawUpdateBusy ? 'Upgrading...' : 'Upgrade'}
-                  onClick={() => { void runOpenclawUpgrade() }}
-                />
-              </div>
-
-              <div style={{ marginTop: 6 }}>
-                <button
-                  onClick={openOnboarding}
-                  style={{
-                    width: '100%',
-                    fontSize: 10,
-                    fontWeight: 600,
-                    padding: '5px 8px',
-                    borderRadius: 8,
-                    border: `1px dashed ${colors.accentBorderMedium}`,
-                    background: colors.accentLight,
-                    color: colors.accent,
-                    cursor: 'pointer',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  Reopen Onboarding
-                </button>
               </div>
               <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                 <button
@@ -457,68 +248,24 @@ export function SettingsPopover() {
                 </button>
               </div>
 
-              <div style={{ height: 1, background: colors.popoverBorder, marginTop: 8, marginBottom: 8 }} />
-
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Keyboard size={14} style={{ color: colors.textTertiary }} />
-                  <div className="text-[12px] font-medium" style={{ color: colors.textPrimary }}>
-                    Utilities
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                  <ActionBtn
-                    colors={colors}
-                    icon={<ClipboardText size={11} />}
-                    label="Copy Diagnostics"
-                    onClick={() => { void copyDiagnostics() }}
-                  />
-                  <ActionBtn
-                    colors={colors}
-                    icon={<Keyboard size={11} />}
-                    label={showShortcuts ? 'Hide Keys' : 'Show Keys'}
-                    onClick={() => setShowShortcuts((v) => !v)}
-                  />
-                  <ActionBtn
-                    colors={colors}
-                    icon={<ClipboardText size={11} />}
-                    label="Copy Keys"
-                    onClick={() => { void copyShortcutCheatsheet() }}
-                  />
-                  <ActionBtn
-                    colors={colors}
-                    icon={<Sparkle size={11} />}
-                    label="Reset Onboarding"
-                    onClick={openOnboarding}
-                  />
-                </div>
-                {showShortcuts && (
-                  <div
-                    style={{
-                      marginTop: 6,
-                      border: `1px solid ${colors.containerBorder}`,
-                      borderRadius: 8,
-                      background: colors.surfaceHover,
-                      padding: '6px 7px',
-                      fontSize: 10,
-                      color: colors.textSecondary,
-                      lineHeight: 1.45,
-                      whiteSpace: 'pre-wrap',
-                    }}
-                  >
-                    Alt+Space — Toggle launcher{'\n'}
-                    Cmd/Ctrl+Shift+K — Toggle launcher fallback{'\n'}
-                    Cmd/Ctrl+Shift+M — Open community skills{'\n'}
-                    Cmd/Ctrl+Shift+A — Open agents control center{'\n'}
-                    Cmd/Ctrl+Shift+S — Open settings control center{'\n'}
-                    Esc — Hide window
-                  </div>
-                )}
-                {utilityText && (
-                  <div style={{ marginTop: 6, fontSize: 10, color: colors.textTertiary }}>
-                    {utilityText}
-                  </div>
-                )}
+              <div style={{ marginTop: 6 }}>
+                <button
+                  onClick={openOnboarding}
+                  style={{
+                    width: '100%',
+                    fontSize: 10,
+                    fontWeight: 600,
+                    padding: '5px 8px',
+                    borderRadius: 8,
+                    border: `1px dashed ${colors.accentBorderMedium}`,
+                    background: colors.accentLight,
+                    color: colors.accent,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  Reopen Onboarding
+                </button>
               </div>
             </div>
           </div>

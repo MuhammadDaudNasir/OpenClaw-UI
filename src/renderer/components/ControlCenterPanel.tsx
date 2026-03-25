@@ -1,8 +1,19 @@
 import React, { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X, Robot, SlidersHorizontal, Terminal, Play, Stop, ArrowsClockwise, FolderOpen } from '@phosphor-icons/react'
+import { X, Robot, SlidersHorizontal, Terminal, Play, Stop, ArrowsClockwise, FolderOpen, Keyboard, ClipboardText, Heartbeat, Sparkle } from '@phosphor-icons/react'
 import { useSessionStore } from '../stores/sessionStore'
 import { useColors } from '../theme'
+
+function formatStatusText(text: string | null | undefined, maxLines = 5): string {
+  if (!text) return ''
+  return text
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0)
+    .filter((line) => !/^[\s\-_=+|:┄─━┈]{8,}$/.test(line))
+    .slice(0, maxLines)
+    .join('\n')
+}
 
 export function ControlCenterPanel() {
   const colors = useColors()
@@ -112,6 +123,10 @@ function SettingsTab() {
   const staticInfo = useSessionStore((s) => s.staticInfo)
   const toggleMarketplace = useSessionStore((s) => s.toggleMarketplace)
   const closeControlCenter = useSessionStore((s) => s.closeControlCenter)
+  const [healthChecking, setHealthChecking] = useState(false)
+  const [healthText, setHealthText] = useState<string | null>(null)
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const [utilityText, setUtilityText] = useState<string | null>(null)
   const [providers, setProviders] = useState<string[]>([])
   const [providerModels, setProviderModels] = useState<Record<string, Array<{ id: string; name: string }>>>({})
   const [pendingProvider, setPendingProvider] = useState<string>('')
@@ -147,6 +162,51 @@ function SettingsTab() {
   }, [pendingProvider, providerModels, pendingModel])
 
   const visibleModels = providerModels[pendingProvider] || openclawModels.map((m) => ({ id: m.id, name: m.label }))
+  const cleanUpdateInfo = formatStatusText(openclawUpdateInfo, 6)
+
+  const runHealth = async () => {
+    setHealthChecking(true)
+    const res = await window.clui.openclawHealth()
+    if (res.ok) {
+      const singleLine = formatStatusText(res.output, 1) || 'OK'
+      setHealthText(`Health: ${singleLine}`)
+    } else {
+      setHealthText(`Health failed: ${res.error || 'Unknown error'}`)
+    }
+    setHealthChecking(false)
+  }
+
+  const openOnboarding = () => {
+    localStorage.setItem('openclaw-onboarding-dismissed', '0')
+    window.dispatchEvent(new Event('openclaw:show-onboarding'))
+  }
+
+  const copyDiagnostics = async () => {
+    try {
+      const payload = await window.clui.getDiagnostics()
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
+      setUtilityText('Diagnostics copied to clipboard.')
+    } catch {
+      setUtilityText('Failed to copy diagnostics.')
+    }
+  }
+
+  const copyShortcutCheatsheet = async () => {
+    const sheet = [
+      'Alt+Space — Toggle launcher',
+      'Cmd/Ctrl+Shift+K — Toggle launcher fallback',
+      'Cmd/Ctrl+Shift+M — Open community skills',
+      'Cmd/Ctrl+Shift+A — Open agents control center',
+      'Cmd/Ctrl+Shift+S — Open settings control center',
+      'Esc — Hide window',
+    ].join('\n')
+    try {
+      await navigator.clipboard.writeText(sheet)
+      setUtilityText('Shortcut list copied.')
+    } catch {
+      setUtilityText('Failed to copy shortcut list.')
+    }
+  }
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -214,12 +274,18 @@ function SettingsTab() {
         <div style={{ fontSize: 11, color: colors.textSecondary }}>CLI: {staticInfo?.cliCommand || 'openclaw'} {staticInfo?.version || 'unknown'}</div>
         <div style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4 }}>Auth: {staticInfo?.email || (staticInfo?.authSupported === false ? 'not exposed' : 'not connected')}</div>
         <div style={{ marginTop: 8, display: 'flex', gap: 7 }}>
+          <Action onClick={() => { void runHealth() }} label={healthChecking ? 'Checking Health...' : 'Health'} icon={<Heartbeat size={11} />} colors={colors} />
           <Action onClick={() => { void checkOpenclawUpdate() }} label={openclawUpdateBusy ? 'Checking...' : 'Check Update'} icon={<ArrowsClockwise size={11} />} colors={colors} />
           <Action onClick={() => { void runOpenclawUpgrade() }} label={openclawUpdateBusy ? 'Upgrading...' : 'Upgrade'} icon={<Play size={11} />} colors={colors} />
         </div>
-        {openclawUpdateInfo && (
-          <div style={{ fontSize: 10, color: colors.textTertiary, marginTop: 6, whiteSpace: 'pre-wrap' }}>
-            {openclawUpdateInfo.split('\n').slice(0, 5).join('\n')}
+        {healthText && (
+          <div style={{ fontSize: 10, color: colors.textTertiary, marginTop: 6, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+            {healthText}
+          </div>
+        )}
+        {cleanUpdateInfo && (
+          <div style={{ fontSize: 10, color: colors.textTertiary, marginTop: 6, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+            {cleanUpdateInfo}
           </div>
         )}
         <div style={{ marginTop: 8 }}>
@@ -232,6 +298,39 @@ function SettingsTab() {
             icon={<ArrowsClockwise size={11} />}
             colors={colors}
           />
+        </div>
+      </Card>
+
+      <Card title="Utilities" colors={colors}>
+        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+          <Action onClick={() => { void copyDiagnostics() }} label="Copy Diagnostics" icon={<ClipboardText size={11} />} colors={colors} />
+          <Action onClick={() => { void copyShortcutCheatsheet() }} label="Copy Keys" icon={<Keyboard size={11} />} colors={colors} />
+          <Action onClick={openOnboarding} label="Reopen Onboarding" icon={<Sparkle size={11} />} colors={colors} />
+          <Action onClick={() => setShowShortcuts((v) => !v)} label={showShortcuts ? 'Hide Keys' : 'Show Keys'} icon={<Keyboard size={11} />} colors={colors} />
+        </div>
+        {showShortcuts && (
+          <div style={{ marginTop: 8, fontSize: 10, color: colors.textSecondary, whiteSpace: 'pre-wrap', lineHeight: 1.45, overflowWrap: 'anywhere' }}>
+            Alt+Space — Toggle launcher{'\n'}
+            Cmd/Ctrl+Shift+K — Toggle launcher fallback{'\n'}
+            Cmd/Ctrl+Shift+M — Open community skills{'\n'}
+            Cmd/Ctrl+Shift+A — Open agents control center{'\n'}
+            Cmd/Ctrl+Shift+S — Open settings control center{'\n'}
+            Esc — Hide window
+          </div>
+        )}
+        {utilityText && (
+          <div style={{ marginTop: 8, fontSize: 10, color: colors.textTertiary }}>
+            {utilityText}
+          </div>
+        )}
+      </Card>
+
+      <Card title="Credits & Attribution" colors={colors}>
+        <div style={{ fontSize: 11, color: colors.textSecondary, lineHeight: 1.5 }}>
+          Original project foundation by lcoutodemos (clui-cc). This OpenClaw UI fork is maintained by Muhammad Daud Nasir.
+        </div>
+        <div style={{ marginTop: 8 }}>
+          <Action onClick={() => { void window.clui.openExternal('https://github.com/lcoutodemos/clui-cc') }} label="Open Original Repo" icon={<FolderOpen size={11} />} colors={colors} />
         </div>
       </Card>
     </div>

@@ -83,6 +83,7 @@ interface State {
   closeControlCenter: () => void
   setControlCenterTab: (tab: 'agents' | 'settings') => void
   closeMarketplace: () => void
+  closeAuxPanels: () => void
   loadMarketplace: (forceRefresh?: boolean) => Promise<void>
   setMarketplaceSearch: (query: string) => void
   setMarketplaceFilter: (filter: string) => void
@@ -364,6 +365,10 @@ export const useSessionStore = create<State>((set, get) => ({
     set({ marketplaceOpen: false })
   },
 
+  closeAuxPanels: () => {
+    set({ marketplaceOpen: false, controlCenterOpen: false })
+  },
+
   loadMarketplace: async (forceRefresh) => {
     set({ marketplaceLoading: true, marketplaceError: null })
     try {
@@ -568,6 +573,9 @@ export const useSessionStore = create<State>((set, get) => ({
 
     // Remove answered item from queue; show next tool's activity or clear
     set((s) => ({
+      isExpanded: true,
+      marketplaceOpen: false,
+      controlCenterOpen: false,
       tabs: s.tabs.map((t) => {
         if (t.id !== tabId) return t
         const remaining = t.permissionQueue.filter((p) => p.questionId !== questionId)

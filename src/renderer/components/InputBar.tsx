@@ -36,6 +36,7 @@ export function InputBar() {
   const addSystemMessage = useSessionStore((s) => s.addSystemMessage)
   const addAttachments = useSessionStore((s) => s.addAttachments)
   const removeAttachment = useSessionStore((s) => s.removeAttachment)
+  const closeAuxPanels = useSessionStore((s) => s.closeAuxPanels)
 
   const setPreferredModel = useSessionStore((s) => s.setPreferredModel)
   const setOpenclawModel = useSessionStore((s) => s.setOpenclawModel)
@@ -299,7 +300,10 @@ export function InputBar() {
       if (e.key === 'Escape') { e.preventDefault(); setSlashFilter(null); return }
     }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
-    if (e.key === 'Escape' && !showSlashMenu) { window.clui.hideWindow() }
+    if (e.key === 'Escape' && !showSlashMenu) {
+      closeAuxPanels()
+      window.clui.hideWindow()
+    }
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

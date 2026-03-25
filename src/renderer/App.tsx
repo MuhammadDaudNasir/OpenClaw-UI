@@ -76,6 +76,13 @@ export default function App() {
     })
   }, [])
 
+  // Every time the launcher is shown again, start from chat-only mode.
+  useEffect(() => {
+    return window.clui.onWindowShown(() => {
+      useSessionStore.getState().closeAuxPanels()
+    })
+  }, [])
+
   const onboardingInfo = useMemo(() => {
     if (!staticInfo) return null
     return {
