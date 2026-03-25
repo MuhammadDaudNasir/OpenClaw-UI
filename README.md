@@ -2,7 +2,7 @@
 
 
 
-A lightweight, transparent desktop overlay for OpenClaw. This fork focuses on one-command deploy, app-style installation, and OpenClaw-first onboarding/control workflows.
+A lightweight,  desktop overlay for OpenClaw. This fork focuses on one-command deploy, app-style installation, and OpenClaw-first onboarding/control workflows.
   
 > Attribution: this project is a fork of [lcoutodemos/clui-cc](https://github.com/lcoutodemos/clui-cc), with original foundation by [lcoutodemos](https://github.com/lcoutodemos).
 
