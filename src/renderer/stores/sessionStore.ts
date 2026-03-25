@@ -123,6 +123,38 @@ async function playNotificationIfHidden(): Promise<void> {
   } catch {}
 }
 
+async function showCompletionNotificationIfHidden(title: string, body: string): Promise<void> {
+  try {
+    const visible = await window.clui.isVisible()
+    if (visible) return
+    if (typeof Notification === 'undefined') return
+
+    if (Notification.permission === 'default') {
+      await Notification.requestPermission()
+    }
+    if (Notification.permission !== 'granted') return
+
+    const notification = new Notification(title, {
+      body,
+      silent: true, // sound is handled via notification.mp3 to keep consistent UX
+    })
+    notification.onclick = () => {
+      try { window.focus() } catch {}
+    }
+  } catch {}
+}
+
+function latestAssistantPreview(messages: Message[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.role === 'assistant' && msg.content.trim().length > 0) {
+      const oneLine = msg.content.replace(/\s+/g, ' ').trim()
+      return oneLine.length > 160 ? `${oneLine.slice(0, 157)}...` : oneLine
+    }
+  }
+  return 'Response completed.'
+}
+
 function makeLocalTab(): TabState {
   return {
     id: crypto.randomUUID(),
@@ -943,8 +975,12 @@ export const useSessionStore = create<State>((set, get) => ({
             } else {
               updated.permissionDenied = null
             }
-            // Play notification sound if window is hidden
+            // Completion cues when app is hidden: sound + native desktop notification
             playNotificationIfHidden()
+            void showCompletionNotificationIfHidden(
+              'OpenClaw UI: Prompt finished',
+              latestAssistantPreview(updated.messages),
+            )
             break
 
           case 'error':
