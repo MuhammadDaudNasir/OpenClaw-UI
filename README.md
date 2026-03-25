@@ -1,4 +1,7 @@
 # OpenClaw UI
+<img width="925" height="675" alt="Screenshot 2026-03-25 at 5 58 24 PM" src="https://github.com/user-attachments/assets/bf8eb9ec-9fd6-410c-9537-f4fedf6530bf" />
+<img width="721" height="568" alt="Screenshot 2026-03-25 at 5 58 09 PM" src="https://github.com/user-attachments/assets/943c30c1-3eed-4398-ab2c-3dd0b1552498" />
+
 
 A lightweight, transparent desktop overlay for OpenClaw. This fork focuses on one-command deploy, app-style installation, and OpenClaw-first onboarding/control workflows.
   
