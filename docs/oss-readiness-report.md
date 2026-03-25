@@ -158,4 +158,4 @@ No telemetry, analytics, auto-updater, or CDN dependencies.
 | No CONTRIBUTING/SECURITY/COC docs | **Medium** | Fix in this branch |
 | Internal docs (PRD, Codex reports) | **Low** | Exclude from public repo |
 | Probe utilities in src/main/probe/ | **Low** | Exclude from public repo |
-| macOS-only (no Windows/Linux) | **Low** | Document as known limitation |
+| Windows support is experimental (macOS is primary) | **Low** | Keep `dist:win` CI smoke build and document platform differences |

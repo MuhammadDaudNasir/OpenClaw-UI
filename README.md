@@ -183,6 +183,10 @@ npm run dist:win
 
 This creates Windows artifacts in `release/` (portable target).
 
+Detailed guide: [`docs/WINDOWS.md`](docs/WINDOWS.md)
+
+To improve confidence without a local Windows PC, this repo now includes a GitHub Actions workflow that runs `npm run build` and `npm run dist:win` on `windows-latest`.
+
 <details>
 <summary><strong>Setup Prerequisites (Detailed)</strong></summary>
 
