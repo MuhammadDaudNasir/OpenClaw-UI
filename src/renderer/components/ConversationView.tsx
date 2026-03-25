@@ -258,12 +258,16 @@ export function ConversationView() {
         onScroll={handleScroll}
       >
         <div
-          className="mb-2 flex items-center justify-center gap-1.5"
+          className="mb-2 flex items-center justify-center"
           style={{ position: 'sticky', top: 0, zIndex: 3, background: colors.containerBg, paddingBottom: 4 }}
         >
           <div
-            className="flex items-center gap-2 rounded-full px-3 py-1.5"
-            style={{ border: `1px solid ${colors.containerBorder}`, background: colors.containerBg }}
+            className="flex items-center rounded-full px-2.5 py-1.5"
+            style={{
+              border: `1px solid ${colors.containerBorder}`,
+              background: colors.surfacePrimary,
+              boxShadow: `0 8px 24px ${colors.shadowMid}`,
+            }}
           >
             <MagnifyingGlass size={12} style={{ color: colors.textTertiary }} />
             <input
@@ -271,7 +275,7 @@ export function ConversationView() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search chat..."
               className="bg-transparent outline-none text-[11px]"
-              style={{ color: colors.textPrimary, width: 200 }}
+              style={{ color: colors.textPrimary, width: 240 }}
             />
             <span className="text-[10px]" style={{ color: colors.textTertiary, minWidth: 36, textAlign: 'right' }}>
               {searchableIds.length > 0 ? `${Math.min(searchIndex + 1, searchableIds.length)}/${searchableIds.length}` : '0'}
@@ -283,7 +287,7 @@ export function ConversationView() {
                 style={{
                   border: `1px solid ${colors.containerBorder}`,
                   color: colors.textSecondary,
-                  background: colors.containerBg,
+                  background: colors.surfaceElevated,
                   opacity: searchableIds.length === 0 ? 0.4 : 1,
                 }}
                 title="Previous match"
@@ -297,7 +301,7 @@ export function ConversationView() {
                 style={{
                   border: `1px solid ${colors.containerBorder}`,
                   color: colors.textSecondary,
-                  background: colors.containerBg,
+                  background: colors.surfaceElevated,
                   opacity: searchableIds.length === 0 ? 0.4 : 1,
                 }}
                 title="Next match"
@@ -306,19 +310,20 @@ export function ConversationView() {
                 <CaretDown size={12} />
               </button>
             </div>
+            <div className="mx-2 h-5" style={{ width: 1, background: colors.containerBorder, opacity: 0.7 }} />
+            <button
+              ref={exportButtonRef}
+              onClick={() => {
+                if (!exportOpen) updateExportPos()
+                setExportOpen((o) => !o)
+              }}
+              className="text-[10px] p-1.5 rounded-full inline-flex items-center gap-1"
+              style={{ border: `1px solid ${colors.containerBorder}`, color: colors.textSecondary, background: colors.surfaceElevated }}
+              title="Export conversation"
+            >
+              <FileArrowUp size={12} />
+            </button>
           </div>
-          <button
-            ref={exportButtonRef}
-            onClick={() => {
-              if (!exportOpen) updateExportPos()
-              setExportOpen((o) => !o)
-            }}
-            className="text-[10px] p-2 rounded-md inline-flex items-center gap-1"
-            style={{ border: `1px solid ${colors.containerBorder}`, color: colors.textSecondary, background: colors.surfacePrimary }}
-            title="Export conversation"
-          >
-            <FileArrowUp size={12} />
-          </button>
         </div>
 
         {popoverLayer && exportOpen && createPortal(
