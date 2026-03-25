@@ -736,7 +736,12 @@ export class PtyRunManager extends EventEmitter {
   private _checkQuiescenceCompletion(requestId: string, handle: PtyRunHandle): void {
     if (!this.activeRuns.has(requestId)) return
     if (!handle.pastInit || handle.permissionPhase === 'waiting_user') return
-    if (Date.now() - handle.lastMeaningfulOutputAt < QUIESCENCE_MS - 50) return
+    const silenceMs = Date.now() - handle.lastMeaningfulOutputAt
+    if (silenceMs < QUIESCENCE_MS - 50) {
+      if (handle.quiescenceTimer) clearTimeout(handle.quiescenceTimer)
+      handle.quiescenceTimer = setTimeout(() => this._checkQuiescenceCompletion(requestId, handle), QUIESCENCE_MS)
+      return
+    }
 
     const lastLines = handle.ptyBuffer.slice(-3)
     const hasPromptMarker = lastLines.some((l) => isInputPrompt(l))
@@ -745,7 +750,15 @@ export class PtyRunManager extends EventEmitter {
       && !hasPromptMarker
       && (Date.now() - handle.lastMeaningfulOutputAt >= QUIESCENCE_MS * 2)
 
-    if (!hasPromptMarker && !openclawSilence) return
+    if (!hasPromptMarker && !openclawSilence) {
+      // In OpenClaw TUI mode there may be no explicit prompt marker.
+      // Keep polling until silence threshold is reached, then complete.
+      if (handle.openclawTuiMode) {
+        if (handle.quiescenceTimer) clearTimeout(handle.quiescenceTimer)
+        handle.quiescenceTimer = setTimeout(() => this._checkQuiescenceCompletion(requestId, handle), QUIESCENCE_MS)
+      }
+      return
+    }
 
     this._flushText(requestId, handle)
     if (!handle.runCompleteEmitted) {
