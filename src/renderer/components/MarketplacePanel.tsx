@@ -346,6 +346,7 @@ function PluginCard({ plugin, status, colors, expanded, onToggleExpand, scrollCo
   const safeDescription = plugin.description || 'No description provided.'
   const safeCategory = plugin.category || 'Other'
   const safeMarketplace = plugin.marketplace || 'Marketplace'
+  const safeMarketplaceSlug = (plugin.repo || '').split('/').pop() || safeMarketplace
   const safeAuthor = plugin.author || 'Unknown'
   const safeRepo = plugin.repo || 'unknown/repo'
   const safeVersion = plugin.version || 'n/a'
@@ -356,7 +357,7 @@ function PluginCard({ plugin, status, colors, expanded, onToggleExpand, scrollCo
       ? `clawhub install ${plugin.installName}`
       : plugin.isSkillMd
         ? `~/.openclaw/skills/${plugin.installName}/SKILL.md`
-        : `openclaw plugin install ${plugin.installName}@${safeMarketplace}`)
+        : `openclaw plugin install ${plugin.installName}@${safeMarketplaceSlug}`)
 
   const githubButton = (
     <button

@@ -1217,26 +1217,26 @@ ipcMain.handle(IPC.OPENCLAW_SET_MODEL, async (_event, { provider, model }: { pro
 ipcMain.handle(IPC.OPENCLAW_RUN, async (_event, { action }: { action: string }) => {
   const { execFileSync } = require('child_process')
   const cliBin = findCliBinary()
-  const commandMap: Record<string, string[][]> = {
-    gateway_start: [['gateway', 'start']],
-    gateway_stop: [['gateway', 'stop']],
-    channels_status: [['channels', 'status']],
-    plugins_list: [['plugins', 'list']],
-    skills_list: [['skills', 'list']],
+  const commandMap: Record<string, Array<{ bin: string; args: string[] }>> = {
+    gateway_start: [{ bin: cliBin, args: ['gateway', 'start'] }],
+    gateway_stop: [{ bin: cliBin, args: ['gateway', 'stop'] }],
+    channels_status: [{ bin: cliBin, args: ['channels', 'status'] }],
+    plugins_list: [{ bin: cliBin, args: ['plugins', 'list'] }],
+    skills_list: [{ bin: cliBin, args: ['skills', 'list'] }],
     update_check: [
-      ['update', 'check'],
-      ['update', 'status'],
-      ['update'],
+      { bin: cliBin, args: ['update', 'check'] },
+      { bin: cliBin, args: ['update', 'status'] },
+      { bin: cliBin, args: ['update'] },
     ],
     update_upgrade: [
-      ['update', 'upgrade'],
-      ['update', 'install'],
-      ['update'],
+      { bin: cliBin, args: ['update', 'upgrade'] },
+      { bin: cliBin, args: ['update', 'install'] },
+      { bin: cliBin, args: ['update'] },
     ],
     gateway_link_whatsapp_qr: [
-      ['channels', 'whatsapp', 'link'],
-      ['channels', 'whatsapp', 'qr'],
-      ['channels', 'link', 'whatsapp'],
+      { bin: cliBin, args: ['channels', 'whatsapp', 'link'] },
+      { bin: cliBin, args: ['channels', 'whatsapp', 'qr'] },
+      { bin: cliBin, args: ['channels', 'link', 'whatsapp'] },
     ],
   }
   let candidates = commandMap[action]
@@ -1245,7 +1245,28 @@ ipcMain.handle(IPC.OPENCLAW_RUN, async (_event, { action }: { action: string }) 
     if (!/^[a-z0-9][a-z0-9-]*$/i.test(slug)) {
       return { ok: false, output: '', error: `Invalid skill slug: ${slug}` }
     }
-    candidates = [['clawhub', 'install', slug]]
+    candidates = [
+      { bin: 'clawhub', args: ['install', slug] },
+      { bin: cliBin, args: ['clawhub', 'install', slug] },
+    ]
+  }
+  if (!candidates && action.startsWith('clawhub_inspect:')) {
+    const slug = action.slice('clawhub_inspect:'.length).trim()
+    if (!/^[a-z0-9][a-z0-9-]*$/i.test(slug)) {
+      return { ok: false, output: '', error: `Invalid skill slug: ${slug}` }
+    }
+    candidates = [
+      { bin: 'clawhub', args: ['inspect', slug] },
+    ]
+  }
+  if (!candidates && action.startsWith('clawhub_search:')) {
+    const query = action.slice('clawhub_search:'.length).trim()
+    if (!query) {
+      return { ok: false, output: '', error: 'Search query is required' }
+    }
+    candidates = [
+      { bin: 'clawhub', args: ['search', query, '--limit', '8'] },
+    ]
   }
   if (!candidates || candidates.length === 0) return { ok: false, output: '', error: `Unsupported action: ${action}` }
 
@@ -1253,15 +1274,22 @@ ipcMain.handle(IPC.OPENCLAW_RUN, async (_event, { action }: { action: string }) 
   let lastStdout = ''
   const tried: string[] = []
 
-  for (const args of candidates) {
-    tried.push([cliBin, ...args].join(' '))
+  for (const candidate of candidates) {
+    tried.push([candidate.bin, ...candidate.args].join(' '))
     try {
-      const output = execFileSync(cliBin, args, {
+      const output = execFileSync(candidate.bin, candidate.args, {
         encoding: 'utf-8',
         timeout: 15000,
         env: getCliEnv(),
         stdio: ['ignore', 'pipe', 'pipe'],
       }).trim()
+      if (
+        (action.startsWith('clawhub_search:') || action.startsWith('clawhub_inspect:'))
+        && output.length === 0
+      ) {
+        lastError = 'ClawHub returned no output'
+        continue
+      }
       return { ok: true, output }
     } catch (err: any) {
       lastError = String(err?.stderr || '').trim() || String(err?.message || 'Command failed')

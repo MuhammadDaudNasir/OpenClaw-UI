@@ -422,9 +422,14 @@ export const useSessionStore = create<State>((set, get) => ({
         }
         // For SKILL.md skills: match individual name against ~/.claude/skills/ dirs
         // For CLI plugins: match installName or "installName@marketplace" against installed_plugins.json
+        const repoSlug = (p.repo || '').split('/').pop() || ''
         const candidates = p.isSkillMd
           ? [p.installName]
-          : [p.installName, `${p.installName}@${p.marketplace}`]
+          : [
+            p.installName,
+            `${p.installName}@${p.marketplace}`,
+            ...(repoSlug ? [`${p.installName}@${repoSlug}`] : []),
+          ]
         const isInstalled = candidates.some((c) => installedSet.has(c.toLowerCase()))
         pluginStates[p.id] = isInstalled ? 'installed' : 'not_installed'
       }
@@ -451,37 +456,54 @@ export const useSessionStore = create<State>((set, get) => ({
   },
 
   installMarketplacePlugin: async (plugin) => {
-    if (plugin.installMode === 'clawhub') {
-      set((s) => ({
-        marketplacePluginStates: { ...s.marketplacePluginStates, [plugin.id]: 'installing' },
-      }))
-      const result = await window.clui.openclawRun(`clawhub_install:${plugin.installName}`)
-      if (result.ok) {
-        set((s) => ({
-          marketplacePluginStates: { ...s.marketplacePluginStates, [plugin.id]: 'installed' as PluginStatus },
-          marketplaceInstalledNames: Array.from(new Set([...s.marketplaceInstalledNames, `clawhub:${plugin.installName}`])),
-        }))
-      } else {
-        set((s) => ({
-          marketplacePluginStates: { ...s.marketplacePluginStates, [plugin.id]: 'failed' as PluginStatus },
-        }))
-      }
+    const state = get()
+    const activeTab = state.tabs.find((t) => t.id === state.activeTabId)
+    if (activeTab && (activeTab.status === 'running' || activeTab.status === 'connecting')) {
+      get().addSystemMessage('OpenClaw is busy. Wait for the current response, then tap Install again.')
       return
     }
-    set((s) => ({
-      marketplacePluginStates: { ...s.marketplacePluginStates, [plugin.id]: 'installing' },
-    }))
-    const result = await window.clui.installPlugin(plugin.repo, plugin.installName, plugin.marketplace, plugin.sourcePath, plugin.isSkillMd)
-    if (result.ok) {
-      set((s) => ({
-        marketplacePluginStates: { ...s.marketplacePluginStates, [plugin.id]: 'installed' as PluginStatus },
-        marketplaceInstalledNames: [...s.marketplaceInstalledNames, plugin.installName],
-      }))
-    } else {
-      set((s) => ({
-        marketplacePluginStates: { ...s.marketplacePluginStates, [plugin.id]: 'failed' },
-      }))
+
+    const marketplaceSlug = (plugin.repo || '').split('/').pop() || plugin.marketplace
+    const command = plugin.isSkillMd
+      ? `Install skill ${plugin.installName} from ${plugin.repo}/${plugin.sourcePath || `skills/${plugin.installName}`}`
+      : `openclaw plugin install ${plugin.installName}@${marketplaceSlug}`
+
+    let prompt = [
+      `Install this skill/plugin for me: ${plugin.name} (${plugin.installName}).`,
+      `Run command: ${command}.`,
+      'After installing, verify it is available and then summarize the result.',
+    ].join('\n')
+
+    if (plugin.installMode === 'clawhub') {
+      const inspect = await window.clui.openclawRun(`clawhub_inspect:${plugin.installName}`)
+      const searchQuery = (plugin.name || plugin.installName).replace(/-/g, ' ')
+      if (inspect.ok) {
+        prompt = `${plugin.name} is a skill i want to install, check clawhub and see if you can install this skill or tell me if theres any simmilar skill on claw hub. The verified slug is ${plugin.installName}. If available, install it and confirm with clawhub list.`
+      } else {
+        let search = await window.clui.openclawRun(`clawhub_search:${searchQuery}`)
+        if (!search.ok || !(search.output || '').trim()) {
+          search = await window.clui.openclawRun(`clawhub_search:${plugin.installName}`)
+        }
+        set((s) => {
+          const nextStates = { ...s.marketplacePluginStates }
+          delete nextStates[plugin.id]
+          return {
+            marketplaceCatalog: s.marketplaceCatalog.filter((p) => p.id !== plugin.id),
+            marketplacePluginStates: nextStates,
+          }
+        })
+        prompt = `${plugin.name} is a skill i want to install, check clawhub and see if you can install this skill or tell me if theres any simmilar skill on claw hub. The listed slug ${plugin.installName} appears stale. Search clawhub, choose the closest valid skill, install it, and confirm with clawhub list.\n\nLive search output:\n${(search.output || search.error || 'Search failed or returned empty output').trim()}`
+      }
     }
+
+    set((s) => ({
+      marketplaceOpen: false,
+      isExpanded: true,
+    }))
+
+    setTimeout(() => {
+      get().sendMessage(prompt)
+    }, 120)
   },
 
   uninstallMarketplacePlugin: async (plugin) => {

@@ -334,9 +334,14 @@ export async function installPlugin(
       if (addResult.exitCode !== 0 && !addResult.stdout.includes('already added') && !addResult.stderr.includes('already added')) {
         return { ok: false, error: addResult.stderr || 'Failed to add marketplace' }
       }
-      const installResult = await execAsync(cliBin, ['plugin', 'install', `${pluginName}@${marketplace}`], 15000)
+      const marketplaceSlug = repo.split('/').pop() || marketplace
+      let installResult = await execAsync(cliBin, ['plugin', 'install', `${pluginName}@${marketplaceSlug}`], 15000)
+      if (installResult.exitCode !== 0 && marketplaceSlug !== marketplace) {
+        // Fallback for legacy/alias marketplace identifiers
+        installResult = await execAsync(cliBin, ['plugin', 'install', `${pluginName}@${marketplace}`], 15000)
+      }
       if (installResult.exitCode !== 0) {
-        return { ok: false, error: installResult.stderr || 'Failed to install plugin' }
+        return { ok: false, error: installResult.stderr || installResult.stdout || 'Failed to install plugin' }
       }
     }
 
