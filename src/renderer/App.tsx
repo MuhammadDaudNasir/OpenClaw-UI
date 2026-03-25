@@ -12,6 +12,7 @@ import { GuidedTourOverlay, type TourStep } from './components/GuidedTourOverlay
 import { PopoverLayerProvider } from './components/PopoverLayer'
 import { useClaudeEvents } from './hooks/useClaudeEvents'
 import { useHealthReconciliation } from './hooks/useHealthReconciliation'
+import { useWorkingMonitor } from './hooks/useWorkingMonitor'
 import { useSessionStore } from './stores/sessionStore'
 import { useColors, useThemeStore, spacing } from './theme'
 
@@ -20,6 +21,7 @@ const TRANSITION = { duration: 0.26, ease: [0.4, 0, 0.1, 1] as const }
 export default function App() {
   useClaudeEvents()
   useHealthReconciliation()
+  useWorkingMonitor()
 
   const activeTabStatus = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.status)
   const addAttachments = useSessionStore((s) => s.addAttachments)

@@ -148,6 +148,8 @@ export interface TabState {
   activeRequestId: string | null
   hasUnread: boolean
   currentActivity: string
+  /** Timestamp of the last normalized event seen for this tab */
+  lastEventAt: number
   permissionQueue: PermissionRequest[]
   /** Fallback card when tools were denied and no interactive permission is available */
   permissionDenied: { tools: Array<{ toolName: string; toolUseId: string }> } | null

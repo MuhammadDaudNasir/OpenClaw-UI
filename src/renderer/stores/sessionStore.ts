@@ -130,6 +130,7 @@ function makeLocalTab(): TabState {
     activeRequestId: null,
     hasUnread: false,
     currentActivity: '',
+    lastEventAt: Date.now(),
     permissionQueue: [],
     permissionDenied: null,
     attachments: [],
@@ -755,7 +756,7 @@ export const useSessionStore = create<State>((set, get) => ({
       const { activeTabId } = s
       const tabs = s.tabs.map((tab) => {
         if (tab.id !== tabId) return tab
-        const updated = { ...tab }
+        const updated = { ...tab, lastEventAt: Date.now() }
 
         switch (event.type) {
           case 'session_init':
@@ -1013,6 +1014,7 @@ export const useSessionStore = create<State>((set, get) => ({
           ? {
               ...t,
               status: newStatus as TabStatus,
+              lastEventAt: Date.now(),
               // Clear activity when transitioning to idle (e.g., after warmup init)
               ...(newStatus === 'idle' ? { currentActivity: '', permissionQueue: [] as import('../../shared/types').PermissionRequest[], permissionDenied: null } : {}),
             }
