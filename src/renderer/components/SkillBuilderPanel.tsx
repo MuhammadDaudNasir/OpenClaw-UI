@@ -3,7 +3,25 @@ import { Plus, Play, X, ArrowsClockwise } from '@phosphor-icons/react'
 import { useColors } from '../theme'
 import { useSessionStore } from '../stores/sessionStore'
 
-type NodeKind = 'time' | 'what' | 'when' | 'where' | 'search' | 'action'
+type NodeKind =
+  | 'trigger'
+  | 'planner'
+  | 'time_window'
+  | 'schedule'
+  | 'condition'
+  | 'switch'
+  | 'context_handoff'
+  | 'tool_profile'
+  | 'permission_gate'
+  | 'search_reddit'
+  | 'search_web'
+  | 'memory_read'
+  | 'memory_write'
+  | 'action_run'
+  | 'retry_backoff'
+  | 'completion_check'
+  | 'notify'
+  | 'fallback'
 
 type SkillNode = {
   id: string
@@ -13,13 +31,25 @@ type SkillNode = {
   value: string
 }
 
-const NODE_LABEL: Record<NodeKind, string> = {
-  time: 'Time',
-  what: 'What',
-  when: 'When',
-  where: 'Where',
-  search: 'Search',
-  action: 'Action',
+const NODE_META: Record<NodeKind, { label: string; color: string; placeholder: string }> = {
+  trigger: { label: 'Trigger', color: '#5aa4ff', placeholder: 'What starts this flow?' },
+  planner: { label: 'Planner', color: '#ff7a45', placeholder: 'Deterministic plan strategy...' },
+  time_window: { label: 'Time Window', color: '#34c759', placeholder: 'Allowed time range...' },
+  schedule: { label: 'Schedule', color: '#20b26b', placeholder: 'Cron / daily / weekly...' },
+  condition: { label: 'If Condition', color: '#ef5350', placeholder: 'Condition expression...' },
+  switch: { label: 'Switch Branch', color: '#ff4d4f', placeholder: 'Case routing rules...' },
+  context_handoff: { label: 'Context Handoff', color: '#00c2d1', placeholder: 'What context to pass?' },
+  tool_profile: { label: 'Tool Profile', color: '#a970ff', placeholder: 'messaging/full/custom...' },
+  permission_gate: { label: 'Permission Gate', color: '#ff6ab3', placeholder: 'Approval policy...' },
+  search_reddit: { label: 'Search Reddit', color: '#4f8cff', placeholder: 'Reddit query/source...' },
+  search_web: { label: 'Search Web', color: '#3e92cc', placeholder: 'Web query/domain...' },
+  memory_read: { label: 'Memory Read', color: '#f6c945', placeholder: 'Load state/ref data...' },
+  memory_write: { label: 'Memory Write', color: '#e0a800', placeholder: 'Persist outputs/state...' },
+  action_run: { label: 'Action', color: '#ff9f43', placeholder: 'Main operation/task...' },
+  retry_backoff: { label: 'Retry/Backoff', color: '#ff5f87', placeholder: 'Retry count & delay...' },
+  completion_check: { label: 'Completion Check', color: '#ff5252', placeholder: 'Done criteria...' },
+  notify: { label: 'Notify', color: '#2dd4bf', placeholder: 'Who/where to notify...' },
+  fallback: { label: 'Fallback', color: '#9aa4b2', placeholder: 'Fallback path...' },
 }
 
 function makeNode(kind: NodeKind, x: number, y: number): SkillNode {
@@ -32,20 +62,35 @@ export function SkillBuilderPanel() {
   const sendMessage = useSessionStore((s) => s.sendMessage)
 
   const [nodes, setNodes] = useState<SkillNode[]>([
-    makeNode('when', 60, 80),
-    makeNode('time', 300, 80),
-    makeNode('what', 540, 80),
-    makeNode('where', 60, 260),
-    makeNode('search', 300, 260),
-    makeNode('action', 540, 260),
+    makeNode('trigger', 80, 80),
+    makeNode('planner', 340, 80),
+    makeNode('tool_profile', 600, 80),
+    makeNode('context_handoff', 80, 260),
+    makeNode('action_run', 340, 260),
+    makeNode('completion_check', 600, 260),
   ])
 
-  const dragRef = useRef<{ id: string; dx: number; dy: number } | null>(null)
+  const [viewport, setViewport] = useState({ x: 0, y: 0 })
+  const dragRef = useRef<
+  | { mode: 'node'; id: string; dx: number; dy: number }
+  | { mode: 'pan'; startX: number; startY: number; baseX: number; baseY: number }
+  | null
+  >(null)
 
   const onMouseMove = (e: React.MouseEvent) => {
     if (!dragRef.current) return
-    const { id, dx, dy } = dragRef.current
-    setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, x: Math.max(12, e.clientX - dx), y: Math.max(12, e.clientY - dy) } : n)))
+    if (dragRef.current.mode === 'node') {
+      const { id, dx, dy } = dragRef.current
+      setNodes((prev) => prev.map((n) => (n.id === id
+        ? { ...n, x: Math.max(-2000, e.clientX - viewport.x - dx), y: Math.max(-2000, e.clientY - viewport.y - dy) }
+        : n)))
+      return
+    }
+    const { startX, startY, baseX, baseY } = dragRef.current
+    setViewport({
+      x: baseX + (e.clientX - startX),
+      y: baseY + (e.clientY - startY),
+    })
   }
 
   const onMouseUp = () => {
@@ -54,23 +99,24 @@ export function SkillBuilderPanel() {
 
   const resetLayout = () => {
     setNodes([
-      makeNode('when', 60, 80),
-      makeNode('time', 300, 80),
-      makeNode('what', 540, 80),
-      makeNode('where', 60, 260),
-      makeNode('search', 300, 260),
-      makeNode('action', 540, 260),
+      makeNode('trigger', 80, 80),
+      makeNode('planner', 340, 80),
+      makeNode('tool_profile', 600, 80),
+      makeNode('context_handoff', 80, 260),
+      makeNode('action_run', 340, 260),
+      makeNode('completion_check', 600, 260),
     ])
+    setViewport({ x: 0, y: 0 })
   }
 
   const addNode = (kind: NodeKind) => {
     const idx = nodes.length
-    setNodes((prev) => [...prev, makeNode(kind, 60 + (idx % 3) * 240, 80 + Math.floor(idx / 3) * 180)])
+    setNodes((prev) => [...prev, makeNode(kind, 80 + (idx % 4) * 240 - viewport.x, 80 + Math.floor(idx / 4) * 170 - viewport.y)])
   }
 
   const prompt = useMemo(() => {
     const parts = nodes
-      .map((n) => ({ label: NODE_LABEL[n.kind], value: n.value.trim() }))
+      .map((n) => ({ label: NODE_META[n.kind].label, value: n.value.trim() }))
       .filter((n) => n.value.length > 0)
       .map((n) => `${n.label}: ${n.value}`)
     if (parts.length === 0) return 'Build me an OpenClaw skill from this node flow.'
@@ -97,7 +143,7 @@ export function SkillBuilderPanel() {
       </div>
 
       <div style={{ display: 'flex', gap: 10, padding: '10px 16px 0' }}>
-        {(['time', 'what', 'when', 'where', 'search', 'action'] as NodeKind[]).map((kind) => (
+        {(Object.keys(NODE_META) as NodeKind[]).map((kind) => (
           <button
             key={kind}
             onClick={() => addNode(kind)}
@@ -105,7 +151,8 @@ export function SkillBuilderPanel() {
             style={{ border: `1px solid ${colors.containerBorder}`, color: colors.textSecondary }}
           >
             <Plus size={11} />
-            {NODE_LABEL[kind]}
+            <span className="inline-block w-2 h-2 rounded-full" style={{ background: NODE_META[kind].color }} />
+            {NODE_META[kind].label}
           </button>
         ))}
       </div>
@@ -116,14 +163,29 @@ export function SkillBuilderPanel() {
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) {
+            dragRef.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, baseX: viewport.x, baseY: viewport.y }
+          }
+        }}
       >
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: `linear-gradient(${colors.containerBorder}22 1px, transparent 1px), linear-gradient(90deg, ${colors.containerBorder}22 1px, transparent 1px)`,
+            backgroundSize: '28px 28px',
+            backgroundPosition: `${viewport.x}px ${viewport.y}px`,
+            pointerEvents: 'none',
+          }}
+        />
         <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
           {nodes.slice(1).map((node, i) => {
             const prev = nodes[i]
-            const x1 = prev.x + 92
-            const y1 = prev.y + 34
-            const x2 = node.x + 10
-            const y2 = node.y + 34
+            const x1 = prev.x + viewport.x + 92
+            const y1 = prev.y + viewport.y + 34
+            const x2 = node.x + viewport.x + 10
+            const y2 = node.y + viewport.y + 34
             return <path key={`${prev.id}-${node.id}`} d={`M ${x1} ${y1} C ${x1 + 60} ${y1}, ${x2 - 60} ${y2}, ${x2} ${y2}`} stroke={colors.containerBorder} fill="none" strokeWidth={1.5} />
           })}
         </svg>
@@ -132,21 +194,25 @@ export function SkillBuilderPanel() {
           <div
             key={node.id}
             className="absolute rounded-lg"
-            style={{ left: node.x, top: node.y, width: 180, border: `1px solid ${colors.containerBorder}`, background: colors.containerBg, boxShadow: colors.cardShadow }}
+            style={{ left: node.x + viewport.x, top: node.y + viewport.y, width: 200, border: `1px solid ${colors.containerBorder}`, background: colors.containerBg, boxShadow: colors.cardShadow }}
           >
             <div
               className="px-2 py-1.5 text-[11px] font-semibold cursor-move"
               style={{ borderBottom: `1px solid ${colors.containerBorder}`, color: colors.textPrimary }}
               onMouseDown={(e) => {
-                dragRef.current = { id: node.id, dx: e.clientX - node.x, dy: e.clientY - node.y }
+                e.stopPropagation()
+                dragRef.current = { mode: 'node', id: node.id, dx: e.clientX - (node.x + viewport.x), dy: e.clientY - (node.y + viewport.y) }
               }}
             >
-              {NODE_LABEL[node.kind]}
+              <span className="inline-flex items-center gap-1.5">
+                <span className="inline-block w-2 h-2 rounded-full" style={{ background: NODE_META[node.kind].color }} />
+                {NODE_META[node.kind].label}
+              </span>
             </div>
             <div className="p-2">
               <input
                 value={node.value}
-                placeholder={`Configure ${NODE_LABEL[node.kind].toLowerCase()}...`}
+                placeholder={NODE_META[node.kind].placeholder}
                 onChange={(e) => {
                   const value = e.target.value
                   setNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, value } : n)))
