@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react'
-import { Plus, Play, X, ArrowsClockwise } from '@phosphor-icons/react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Plus, Play, X, ArrowsClockwise, Trash } from '@phosphor-icons/react'
 import { useColors } from '../theme'
 import { useSessionStore } from '../stores/sessionStore'
 
@@ -29,6 +30,12 @@ type SkillNode = {
   x: number
   y: number
   value: string
+}
+
+type SkillEdge = {
+  id: string
+  from: string
+  to: string
 }
 
 const NODE_META: Record<NodeKind, { label: string; color: string; placeholder: string }> = {
@@ -61,16 +68,14 @@ export function SkillBuilderPanel() {
   const closeSkillBuilder = useSessionStore((s) => s.closeSkillBuilder)
   const sendMessage = useSessionStore((s) => s.sendMessage)
 
-  const [nodes, setNodes] = useState<SkillNode[]>([
-    makeNode('trigger', 80, 80),
-    makeNode('planner', 340, 80),
-    makeNode('tool_profile', 600, 80),
-    makeNode('context_handoff', 80, 260),
-    makeNode('action_run', 340, 260),
-    makeNode('completion_check', 600, 260),
-  ])
+  // Start empty on open — user explicitly composes the flow.
+  const [nodes, setNodes] = useState<SkillNode[]>([])
+  const [edges, setEdges] = useState<SkillEdge[]>([])
 
   const [viewport, setViewport] = useState({ x: 0, y: 0 })
+  const [mouseCanvas, setMouseCanvas] = useState({ x: 0, y: 0 })
+  const [linkFrom, setLinkFrom] = useState<string | null>(null)
+  const canvasRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<
   | { mode: 'node'; id: string; dx: number; dy: number }
   | { mode: 'pan'; startX: number; startY: number; baseX: number; baseY: number }
@@ -78,6 +83,10 @@ export function SkillBuilderPanel() {
   >(null)
 
   const onMouseMove = (e: React.MouseEvent) => {
+    if (canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect()
+      setMouseCanvas({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+    }
     if (!dragRef.current) return
     if (dragRef.current.mode === 'node') {
       const { id, dx, dy } = dragRef.current
@@ -98,14 +107,9 @@ export function SkillBuilderPanel() {
   }
 
   const resetLayout = () => {
-    setNodes([
-      makeNode('trigger', 80, 80),
-      makeNode('planner', 340, 80),
-      makeNode('tool_profile', 600, 80),
-      makeNode('context_handoff', 80, 260),
-      makeNode('action_run', 340, 260),
-      makeNode('completion_check', 600, 260),
-    ])
+    setNodes([])
+    setEdges([])
+    setLinkFrom(null)
     setViewport({ x: 0, y: 0 })
   }
 
@@ -114,18 +118,64 @@ export function SkillBuilderPanel() {
     setNodes((prev) => [...prev, makeNode(kind, 80 + (idx % 4) * 240 - viewport.x, 80 + Math.floor(idx / 4) * 170 - viewport.y)])
   }
 
+  const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes])
+
   const prompt = useMemo(() => {
-    const parts = nodes
-      .map((n) => ({ label: NODE_META[n.kind].label, value: n.value.trim() }))
-      .filter((n) => n.value.length > 0)
-      .map((n) => `${n.label}: ${n.value}`)
-    if (parts.length === 0) return 'Build me an OpenClaw skill from this node flow.'
+    if (nodes.length === 0) {
+      return [
+        'Build me an OpenClaw skill scaffold.',
+        'No nodes are configured yet; propose a sensible default workflow and ask clarifying questions.',
+      ].join('\n')
+    }
+
+    const ids = new Map(nodes.map((n, i) => [n.id, `N${i + 1}`]))
+    const nodeLines = nodes.map((n) => {
+      const tag = ids.get(n.id) || n.id
+      const meta = NODE_META[n.kind]
+      const value = n.value.trim() || '(not configured)'
+      return `${tag} [${meta.label}] ${value}`
+    })
+
+    const edgeLines = edges
+      .map((e) => {
+        const from = ids.get(e.from)
+        const to = ids.get(e.to)
+        if (!from || !to) return null
+        return `${from} -> ${to}`
+      })
+      .filter((v): v is string => !!v)
+
     return [
-      'Build me an OpenClaw skill using this node flow:',
-      ...parts.map((p) => `- ${p}`),
-      'Generate the skill structure, execution logic, and usage notes.',
+      'Build an OpenClaw skill from this visual graph.',
+      'Return: 1) skill architecture, 2) node-to-step mapping, 3) implementation sketch, 4) usage examples.',
+      '',
+      'Nodes:',
+      ...nodeLines.map((l) => `- ${l}`),
+      '',
+      'Connections:',
+      ...(edgeLines.length > 0 ? edgeLines.map((l) => `- ${l}`) : ['- (no explicit links; infer a sensible order)']),
+      '',
+      'Rules:',
+      '- Preserve branching semantics when Condition/Switch exists.',
+      '- Time/Schedule gates must execute before Action nodes.',
+      '- Completion Check and Fallback must be explicit.',
+      '- If graph is incomplete, state assumptions clearly.',
     ].join('\n')
-  }, [nodes])
+  }, [nodes, edges])
+
+  const removeNode = (id: string) => {
+    setNodes((prev) => prev.filter((n) => n.id !== id))
+    setEdges((prev) => prev.filter((e) => e.from !== id && e.to !== id))
+    setLinkFrom((curr) => (curr === id ? null : curr))
+  }
+
+  const createLink = (from: string, to: string) => {
+    if (from === to) return
+    setEdges((prev) => {
+      if (prev.some((e) => e.from === from && e.to === to)) return prev
+      return [...prev, { id: crypto.randomUUID(), from, to }]
+    })
+  }
 
   return (
     <div data-clui-ui style={{ height: 560, display: 'flex', flexDirection: 'column' }}>
@@ -142,7 +192,7 @@ export function SkillBuilderPanel() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 10, padding: '10px 16px 0' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 16px 0' }}>
         {(Object.keys(NODE_META) as NodeKind[]).map((kind) => (
           <button
             key={kind}
@@ -158,6 +208,7 @@ export function SkillBuilderPanel() {
       </div>
 
       <div
+        ref={canvasRef}
         className="relative"
         style={{ flex: 1, margin: 12, border: `1px solid ${colors.containerBorder}`, borderRadius: 14, overflow: 'hidden', background: colors.surfacePrimary }}
         onMouseMove={onMouseMove}
@@ -180,21 +231,48 @@ export function SkillBuilderPanel() {
           }}
         />
         <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-          {nodes.slice(1).map((node, i) => {
-            const prev = nodes[i]
-            const x1 = prev.x + viewport.x + 92
-            const y1 = prev.y + viewport.y + 34
-            const x2 = node.x + viewport.x + 10
-            const y2 = node.y + viewport.y + 34
-            return <path key={`${prev.id}-${node.id}`} d={`M ${x1} ${y1} C ${x1 + 60} ${y1}, ${x2 - 60} ${y2}, ${x2} ${y2}`} stroke={colors.containerBorder} fill="none" strokeWidth={1.5} />
+          {edges.map((edge) => {
+            const from = nodeById.get(edge.from)
+            const to = nodeById.get(edge.to)
+            if (!from || !to) return null
+            const x1 = from.x + viewport.x + 198
+            const y1 = from.y + viewport.y + 34
+            const x2 = to.x + viewport.x + 2
+            const y2 = to.y + viewport.y + 34
+            return (
+              <motion.path
+                key={edge.id}
+                d={`M ${x1} ${y1} C ${x1 + 70} ${y1}, ${x2 - 70} ${y2}, ${x2} ${y2}`}
+                stroke={colors.containerBorder}
+                fill="none"
+                strokeWidth={2}
+                initial={{ pathLength: 0, opacity: 0.3 }}
+                animate={{ pathLength: 1, opacity: 1 }}
+                transition={{ duration: 0.22 }}
+              />
+            )
           })}
+          {linkFrom && nodeById.get(linkFrom) && (
+            <path
+              d={`M ${nodeById.get(linkFrom)!.x + viewport.x + 198} ${nodeById.get(linkFrom)!.y + viewport.y + 34} C ${nodeById.get(linkFrom)!.x + viewport.x + 268} ${nodeById.get(linkFrom)!.y + viewport.y + 34}, ${mouseCanvas.x - 70} ${mouseCanvas.y}, ${mouseCanvas.x} ${mouseCanvas.y}`}
+              stroke={colors.accent}
+              fill="none"
+              strokeWidth={2}
+              strokeDasharray="6 4"
+            />
+          )}
         </svg>
 
+        <AnimatePresence>
         {nodes.map((node) => (
-          <div
+          <motion.div
             key={node.id}
             className="absolute rounded-lg"
             style={{ left: node.x + viewport.x, top: node.y + viewport.y, width: 200, border: `1px solid ${colors.containerBorder}`, background: colors.containerBg, boxShadow: colors.cardShadow }}
+            initial={{ opacity: 0, y: 8, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.95 }}
+            transition={{ duration: 0.16 }}
           >
             <div
               className="px-2 py-1.5 text-[11px] font-semibold cursor-move"
@@ -207,6 +285,20 @@ export function SkillBuilderPanel() {
               <span className="inline-flex items-center gap-1.5">
                 <span className="inline-block w-2 h-2 rounded-full" style={{ background: NODE_META[node.kind].color }} />
                 {NODE_META[node.kind].label}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <button
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    removeNode(node.id)
+                  }}
+                  className="w-5 h-5 rounded inline-flex items-center justify-center"
+                  style={{ color: colors.textTertiary }}
+                  title="Delete node"
+                >
+                  <Trash size={11} />
+                </button>
               </span>
             </div>
             <div className="p-2">
@@ -221,8 +313,32 @@ export function SkillBuilderPanel() {
                 style={{ color: colors.textPrimary }}
               />
             </div>
-          </div>
+            <button
+              className="absolute -left-2 top-[28px] w-3 h-3 rounded-full"
+              style={{ background: colors.surfaceHover, border: `1px solid ${colors.containerBorder}` }}
+              title="Link target (input)"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (linkFrom) {
+                  createLink(linkFrom, node.id)
+                  setLinkFrom(null)
+                }
+              }}
+            />
+            <button
+              className="absolute -right-2 top-[28px] w-3 h-3 rounded-full"
+              style={{ background: linkFrom === node.id ? colors.accent : NODE_META[node.kind].color, border: `1px solid ${colors.containerBorder}` }}
+              title="Link source (output)"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                setLinkFrom((curr) => (curr === node.id ? null : node.id))
+              }}
+            />
+          </motion.div>
         ))}
+        </AnimatePresence>
       </div>
 
       <div style={{ padding: '0 16px 14px' }}>
