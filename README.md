@@ -49,7 +49,7 @@ Remote one-liner installer (installs OpenClaw UI into `/Applications`):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MuhammadDaudNasir/OpenClaw-UI/main/install.sh | bash
 ```
-This install currently might be broken, futher testing needed.
+This install currently works for MacOS only. :)
 After install, users can launch **OpenClaw UI** directly from Applications/Spotlight without Terminal.
 
 ## Local Deploy (Alternative)
