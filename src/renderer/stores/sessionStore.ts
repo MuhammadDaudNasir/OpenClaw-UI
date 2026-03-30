@@ -57,6 +57,7 @@ interface State {
   marketplaceOpen: boolean
   controlCenterOpen: boolean
   controlCenterTab: 'agents' | 'settings'
+  skillBuilderOpen: boolean
   marketplaceCatalog: CatalogPlugin[]
   marketplaceLoading: boolean
   marketplaceError: string | null
@@ -79,6 +80,9 @@ interface State {
   clearTab: () => void
   toggleExpanded: () => void
   toggleMarketplace: () => void
+  toggleSkillBuilder: () => void
+  openSkillBuilder: () => void
+  closeSkillBuilder: () => void
   openControlCenter: (tab?: 'agents' | 'settings') => void
   closeControlCenter: () => void
   setControlCenterTab: (tab: 'agents' | 'settings') => void
@@ -201,6 +205,7 @@ export const useSessionStore = create<State>((set, get) => ({
   marketplaceOpen: false,
   controlCenterOpen: false,
   controlCenterTab: 'agents',
+  skillBuilderOpen: false,
   marketplaceCatalog: [],
   marketplaceLoading: false,
   marketplaceError: null,
@@ -376,13 +381,30 @@ export const useSessionStore = create<State>((set, get) => ({
     if (s.marketplaceOpen) {
       set({ marketplaceOpen: false })
     } else {
-      set({ isExpanded: false, marketplaceOpen: true, controlCenterOpen: false })
+      set({ isExpanded: false, marketplaceOpen: true, controlCenterOpen: false, skillBuilderOpen: false })
       get().loadMarketplace()
     }
   },
 
+  toggleSkillBuilder: () => {
+    const s = get()
+    if (s.skillBuilderOpen) {
+      set({ skillBuilderOpen: false })
+    } else {
+      set({ isExpanded: false, skillBuilderOpen: true, marketplaceOpen: false, controlCenterOpen: false })
+    }
+  },
+
+  openSkillBuilder: () => {
+    set({ isExpanded: false, skillBuilderOpen: true, marketplaceOpen: false, controlCenterOpen: false })
+  },
+
+  closeSkillBuilder: () => {
+    set({ skillBuilderOpen: false })
+  },
+
   openControlCenter: (tab = 'agents') => {
-    set({ isExpanded: false, marketplaceOpen: false, controlCenterOpen: true, controlCenterTab: tab })
+    set({ isExpanded: false, marketplaceOpen: false, skillBuilderOpen: false, controlCenterOpen: true, controlCenterTab: tab })
   },
 
   closeControlCenter: () => {
@@ -398,7 +420,7 @@ export const useSessionStore = create<State>((set, get) => ({
   },
 
   closeAuxPanels: () => {
-    set({ marketplaceOpen: false, controlCenterOpen: false })
+    set({ marketplaceOpen: false, controlCenterOpen: false, skillBuilderOpen: false })
   },
 
   loadMarketplace: async (forceRefresh) => {

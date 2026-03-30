@@ -23,7 +23,7 @@
     "dist:win": "electron-vite build --mode production && electron-builder --win --dir",
     "doctor": "bash scripts/doctor.sh",
     "setup:git": "bash ./commands/setup-git.command",
-    "postinstall": "electron-builder install-app-deps && bash scripts/patch-dev-icon.sh"
+    "postinstall": "electron-builder install-app-deps && node scripts/postinstall.js"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Paperclip, Camera, HeadCircuit, Sparkle } from '@phosphor-icons/react'
+import { Paperclip, Camera, HeadCircuit, Sparkle, Wrench } from '@phosphor-icons/react'
 import { TabStrip } from './components/TabStrip'
 import { ConversationView } from './components/ConversationView'
 import { InputBar } from './components/InputBar'
@@ -8,6 +8,7 @@ import { StatusBar } from './components/StatusBar'
 import { MarketplacePanel } from './components/MarketplacePanel'
 import { OnboardingPanel } from './components/OnboardingPanel'
 import { ControlCenterPanel } from './components/ControlCenterPanel'
+import { SkillBuilderPanel } from './components/SkillBuilderPanel'
 import { GuidedTourOverlay, type TourStep } from './components/GuidedTourOverlay'
 import { PopoverLayerProvider } from './components/PopoverLayer'
 import { useClaudeEvents } from './hooks/useClaudeEvents'
@@ -37,6 +38,7 @@ export default function App() {
   const isExpanded = useSessionStore((s) => s.isExpanded)
   const marketplaceOpen = useSessionStore((s) => s.marketplaceOpen)
   const controlCenterOpen = useSessionStore((s) => s.controlCenterOpen)
+  const skillBuilderOpen = useSessionStore((s) => s.skillBuilderOpen)
   const isRunning = activeTabStatus === 'running' || activeTabStatus === 'connecting'
 
   // ─── Theme initialization ───
@@ -371,6 +373,39 @@ export default function App() {
                 </motion.div>
               </div>
             )}
+
+            {skillBuilderOpen && (
+              <div
+                data-clui-ui
+                style={{
+                  width: 920,
+                  maxWidth: 920,
+                  marginLeft: '50%',
+                  transform: 'translateX(-50%)',
+                  marginBottom: 14,
+                  position: 'relative',
+                  zIndex: 31,
+                }}
+              >
+                <motion.div
+                  initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.985 }}
+                  transition={TRANSITION}
+                >
+                  <div
+                    data-clui-ui
+                    className="glass-surface overflow-hidden no-drag"
+                    style={{
+                      borderRadius: 24,
+                      maxHeight: 560,
+                    }}
+                  >
+                    <SkillBuilderPanel />
+                  </div>
+                </motion.div>
+              </div>
+            )}
           </AnimatePresence>
 
           {/*
@@ -447,6 +482,15 @@ export default function App() {
                   style={topActionBtnStyle(colors, isRunning)}
                 >
                   <Sparkle size={16} />
+                </button>
+                <button
+                  className="glass-surface"
+                  title="Visual Skill Builder"
+                  onClick={() => useSessionStore.getState().toggleSkillBuilder()}
+                  disabled={isRunning}
+                  style={topActionBtnStyle(colors, isRunning)}
+                >
+                  <Wrench size={16} />
                 </button>
               </div>
             </div>

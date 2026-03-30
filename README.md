@@ -20,6 +20,7 @@ A lightweight,  desktop overlay for OpenClaw. This fork focuses on one-command d
 - **Permission approval UI** — intercepts tool calls via PreToolUse HTTP hooks so you can review and approve/deny from the UI.
 - **Conversation history** — browse and resume past OpenClaw sessions.
 - **Skills marketplace** — install plugins from Anthropic's GitHub repos without leaving OpenClaw UI.
+- **Visual skill builder** — node-style skill composition panel (When/Time/What/Where/Search/Action) that generates a structured build prompt.
 - **Voice input** — local speech-to-text via Whisper (required, installed automatically).
 - **File & screenshot attachments** — paste images or attach files directly.
 - **Dual theme** — dark/light mode with system-follow option.
