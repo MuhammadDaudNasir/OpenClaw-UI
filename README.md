@@ -15,36 +15,35 @@ A lightweight,  desktop overlay for OpenClaw. This fork focuses on one-command d
 
 ## Features
 
-- **Floating overlay** — transparent, click-through window that stays on top. Toggle with `⌥ + Space` (fallback: `Cmd+Shift+K`).
+- **Floating overlay** — a click-through window that stays on top. Toggle with `⌥ + Space` (fallback: `Cmd+Shift+K`).
 - **Multi-tab sessions** — each tab runs its own OpenClaw TUI session with independent state.
-- **Permission approval UI** — intercepts tool calls via PreToolUse HTTP hooks so you can review and approve/deny from the UI.
 - **Conversation history** — browse and resume past OpenClaw sessions.
 - **Skills marketplace** — install plugins from Anthropic's GitHub repos without leaving OpenClaw UI.
 - **Visual skill builder** — node-style skill composition panel (When/Time/What/Where/Search/Action) that generates a structured build prompt.
 - **Voice input** — local speech-to-text via Whisper (required, installed automatically).
 - **File & screenshot attachments** — paste images or attach files directly.
-- **Dual theme** — dark/light mode with system-follow option.
 
 ## Why OpenClaw UI
 
-- **OpenClaw, but visual** — keep CLI power while getting a fast desktop UX for approvals, history, and multitasking.
-- **Human-in-the-loop safety** — tool calls are reviewed and approved in-app before execution.
-- **Session-native workflow** — each tab runs an independent OpenClaw session you can resume later.
-- **Local-first** — everything runs through your local OpenClaw CLI. No telemetry, no cloud dependency.
+- **OpenClaw, but visual✨✨** — keep CLI power while getting a fast desktop UX for approvals, history, and multitasking.
+- **Human-in-the-loop safety** — tool calls are reviewed and approved in-app by YOU, yes you before execution.
+- **Session-native workflow** — each tab runs an independent OpenClaw session you can resume later but is still connected to the same openclaw agent lol
+- **Local-first** — everything runs through your local OpenClaw CLI. No network needed (unless your using a provider for the ai model*)
+
 
 ## How It Works
 
 ```
 UI prompt → Main process spawns openclaw tui --message
         → PTY stream parser → live render
-        → tool call? → permission UI → approve/deny
+        → tool call? → permission UI given to the user → approve/deny
 ```
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full deep-dive.
 
 ## Primary Install (One-Liner)
 
-Remote one-liner installer (installs OpenClaw UI into `/Applications`):
+Remote one-liner installer (installs OpenClaw UI into `/Applications' on mac)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MuhammadDaudNasir/OpenClaw-UI/main/install.sh | bash
@@ -114,7 +113,7 @@ cd OpenClaw-UI
 ./commands/start.command
 ```
 
-> Press **⌥ + Space** to show/hide the overlay. If your macOS input source claims that combo, use **Cmd+Shift+K**.
+> Press **⌥ + Space** to show/hide the overlay. If your macOS input source claims that combo which it shouldnt do lol, use **Cmd+Shift+K**.
 
 To stop:
 
@@ -193,7 +192,7 @@ This creates Windows artifacts in `release/` (portable target).
 
 Detailed guide: [`docs/WINDOWS.md`](docs/WINDOWS.md)
 
-To improve confidence without a local Windows PC, this repo now includes a GitHub Actions workflow that runs `npm run build` and `npm run dist:win` on `windows-latest`.
+To improve confidence without a local Windows PC, this repo now includes a GitHub Actions workflow that runs `npm run build` and `npm run dist:win` on `windows-latest`. but currently doesnt work
 
 <details>
 <summary><strong>Setup Prerequisites (Detailed)</strong></summary>
